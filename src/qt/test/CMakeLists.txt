@@ -1,0 +1,54 @@
+# Copyright (c) 2024-present The Bitcoin Core developers
+# Distributed under the MIT software license, see the accompanying
+# file COPYING or https://opensource.org/license/mit/.
+
+set(CMAKE_AUTOMOC_MOC_OPTIONS "-p${CMAKE_CURRENT_SOURCE_DIR}")
+
+add_executable(test_bitplus-qt
+  apptests.cpp
+  optiontests.cpp
+  rpcnestedtests.cpp
+  test_main.cpp
+  uritests.cpp
+  util.cpp
+  ../../init/bitplus-qt.cpp
+)
+
+add_windows_application_manifest(test_bitplus-qt)
+
+target_link_libraries(test_bitplus-qt
+  core_interface
+  bitplusqt
+  test_util
+  bitplus_node
+  Boost::headers
+  Qt6::Test
+)
+
+import_plugins(test_bitplus-qt)
+
+if(ENABLE_WALLET)
+  target_sources(test_bitplus-qt
+    PRIVATE
+      addressbooktests.cpp
+      wallettests.cpp
+      ../../wallet/test/wallet_test_fixture.cpp
+  )
+endif()
+
+add_test(NAME test_bitplus-qt
+  COMMAND test_bitplus-qt
+)
+if(WIN32 AND VCPKG_TARGET_TRIPLET)
+  set(plugin_path "$<SHELL_PATH:$<PATH:GET_PARENT_PATH,$<PATH:GET_PARENT_PATH,$<TARGET_PROPERTY:Qt6::QWindowsIntegrationPlugin,LOCATION_$<CONFIG>>>>>")
+  set_property(TEST test_bitplus-qt APPEND PROPERTY
+    ENVIRONMENT_MODIFICATION
+      # On Windows, vcpkg configures Qt with `-opengl dynamic`, which makes
+      # the "minimal" platform plugin unusable due to internal Qt bugs.
+      QT_QPA_PLATFORM=set:windows
+      QT_PLUGIN_PATH=set:${plugin_path}
+  )
+  unset(plugin_path)
+endif()
+
+install_binary_component(test_bitplus-qt INTERNAL)

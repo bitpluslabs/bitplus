@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Bitplus Core Security Policy
+    url: https://github.com/bitplus/bitplus/blob/master/SECURITY.md
+    about: View security policy
+  - name: Bitplus Core Developers
+    url: https://bitpluscore.org
+    about: Bitplus Core homepage

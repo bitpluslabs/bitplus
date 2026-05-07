@@ -1,0 +1,93 @@
+#!/sbin/openrc-run
+
+# backward compatibility for existing gentoo layout
+#
+if [ -d "/var/lib/bitplus/.bitplus" ]; then
+	BITPLUSD_DEFAULT_DATADIR="/var/lib/bitplus/.bitplus"
+else
+	BITPLUSD_DEFAULT_DATADIR="/var/lib/bitplusd"
+fi
+
+BITPLUSD_CONFIGFILE=${BITPLUSD_CONFIGFILE:-/etc/bitplus/bitplus.conf}
+BITPLUSD_PIDDIR=${BITPLUSD_PIDDIR:-/var/run/bitplusd}
+BITPLUSD_PIDFILE=${BITPLUSD_PIDFILE:-${BITPLUSD_PIDDIR}/bitplusd.pid}
+BITPLUSD_DATADIR=${BITPLUSD_DATADIR:-${BITPLUSD_DEFAULT_DATADIR}}
+BITPLUSD_USER=${BITPLUSD_USER:-${BITPLUS_USER:-bitplus}}
+BITPLUSD_GROUP=${BITPLUSD_GROUP:-bitplus}
+BITPLUSD_BIN=${BITPLUSD_BIN:-/usr/bin/bitplusd}
+BITPLUSD_NICE=${BITPLUSD_NICE:-${NICELEVEL:-0}}
+BITPLUSD_OPTS="${BITPLUSD_OPTS:-${BITPLUS_OPTS}}"
+
+name="Bitplus Core Daemon"
+description="Bitplus cryptocurrency P2P network daemon"
+
+command="/usr/bin/bitplusd"
+command_args="-pid=\"${BITPLUSD_PIDFILE}\" \
+		-conf=\"${BITPLUSD_CONFIGFILE}\" \
+		-datadir=\"${BITPLUSD_DATADIR}\" \
+		-daemon \
+		${BITPLUSD_OPTS}"
+
+required_files="${BITPLUSD_CONFIGFILE}"
+start_stop_daemon_args="-u ${BITPLUSD_USER} \
+			-N ${BITPLUSD_NICE} -w 2000"
+pidfile="${BITPLUSD_PIDFILE}"
+
+# The retry schedule to use when stopping the daemon. Could be either
+# a timeout in seconds or multiple signal/timeout pairs (like
+# "SIGKILL/180 SIGTERM/300")
+retry="${BITPLUSD_SIGTERM_TIMEOUT}"
+
+depend() {
+	need localmount net
+}
+
+# verify
+# 1) that the datadir exists and is writable (or create it)
+# 2) that a directory for the pid exists and is writable
+# 3) ownership and permissions on the config file
+start_pre() {
+	checkpath \
+	-d \
+	--mode 0750 \
+	--owner "${BITPLUSD_USER}:${BITPLUSD_GROUP}" \
+	"${BITPLUSD_DATADIR}"
+
+	checkpath \
+	-d \
+	--mode 0755 \
+	--owner "${BITPLUSD_USER}:${BITPLUSD_GROUP}" \
+	"${BITPLUSD_PIDDIR}"
+
+	checkpath -f \
+	-o "${BITPLUSD_USER}:${BITPLUSD_GROUP}" \
+	-m 0660 \
+	"${BITPLUSD_CONFIGFILE}"
+
+	checkconfig || return 1
+}
+
+checkconfig()
+{
+	if grep -qs '^rpcuser=' "${BITPLUSD_CONFIGFILE}" && \
+		! grep -qs '^rpcpassword=' "${BITPLUSD_CONFIGFILE}" ; then
+		eerror ""
+		eerror "ERROR: You must set a secure rpcpassword to run bitplusd."
+		eerror "The setting must appear in ${BITPLUSD_CONFIGFILE}"
+		eerror ""
+		eerror "This password is security critical to securing wallets "
+		eerror "and must not be the same as the rpcuser setting."
+		eerror "You can generate a suitable random password using the following "
+		eerror "command from the shell:"
+		eerror ""
+		eerror "bash -c 'tr -dc a-zA-Z0-9 < /dev/urandom | head -c32 && echo'"
+		eerror ""
+		eerror "It is recommended that you also set alertnotify so you are "
+		eerror "notified of problems:"
+		eerror ""
+		eerror "ie: alertnotify=echo %%s | mail -s \"Bitplus Alert\"" \
+			"admin@foo.com"
+		eerror ""
+		return 1
+	fi
+}

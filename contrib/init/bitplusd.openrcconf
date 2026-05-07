@@ -1,0 +1,33 @@
+# /etc/conf.d/bitplusd: config file for /etc/init.d/bitplusd
+
+# Config file location
+#BITPLUSD_CONFIGFILE="/etc/bitplus/bitplus.conf"
+
+# What directory to write pidfile to?  (created and owned by $BITPLUSD_USER)
+#BITPLUSD_PIDDIR="/var/run/bitplusd"
+
+# What filename to give the pidfile
+#BITPLUSD_PIDFILE="${BITPLUSD_PIDDIR}/bitplusd.pid"
+
+# Where to write bitplusd data (be mindful that the blockchain is large)
+#BITPLUSD_DATADIR="/var/lib/bitplusd"
+
+# User and group to own bitplusd process
+#BITPLUSD_USER="bitplus"
+#BITPLUSD_GROUP="bitplus"
+
+# Path to bitplusd executable
+#BITPLUSD_BIN="/usr/bin/bitplusd"
+
+# Nice value to run bitplusd under
+#BITPLUSD_NICE=0
+
+# Additional options (avoid -conf and -datadir, use flags above)
+#BITPLUSD_OPTS=""
+
+# The timeout in seconds OpenRC will wait for bitplusd to terminate
+# after a SIGTERM has been raised.
+# Note that this will be mapped as argument to start-stop-daemon's
+# '--retry' option, which means you can specify a retry schedule
+# here. For more information see man 8 start-stop-daemon.
+BITPLUSD_SIGTERM_TIMEOUT=600

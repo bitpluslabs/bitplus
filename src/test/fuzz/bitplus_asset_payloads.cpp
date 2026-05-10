@@ -49,7 +49,7 @@ FUZZ_TARGET(bitplus_asset_payloads)
 
     FuzzedDataProvider provider(buffer.data(), buffer.size());
 
-    const std::vector<unsigned char> raw_payload{provider.ConsumeRandomLengthByteVector(256)};
+    const std::vector<unsigned char> raw_payload{ConsumeRandomLengthByteVector(provider, 256)};
     (void)bitplus::assets::DecodeAssetCommitment(raw_payload);
     (void)bitplus::assets::DecodeAssetMetadataCommitment(raw_payload);
     (void)bitplus::assets::DecodeAssetWhitelistCommitment(raw_payload);

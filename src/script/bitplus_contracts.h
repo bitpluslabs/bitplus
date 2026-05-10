@@ -9,6 +9,7 @@
 #include <script/bitplus_assets.h>
 #include <script/script.h>
 #include <uint256.h>
+#include <util/result.h>
 
 #include <cstdint>
 
@@ -16,6 +17,7 @@ namespace bitplus::contracts {
 
 /** Build <scriptPubKeyHash> <amount> <output_index> OP_CHECKOUTPUTVERIFY. */
 CScript BuildCheckOutputVerifyScript(const CScript& script_pub_key, CAmount amount, uint32_t output_index);
+util::Result<CScript> BuildCheckOutputVerifyScriptChecked(const CScript& script_pub_key, CAmount amount, uint32_t output_index);
 
 /**
  * Build a vault recovery leaf.
@@ -25,6 +27,7 @@ CScript BuildCheckOutputVerifyScript(const CScript& script_pub_key, CAmount amou
  * transaction to create the exact recovery output.
  */
 CScript BuildVaultRecoveryLeaf(const CScript& authorization_script, const CScript& recovery_script_pub_key, CAmount amount, uint32_t output_index);
+util::Result<CScript> BuildVaultRecoveryLeafChecked(const CScript& authorization_script, const CScript& recovery_script_pub_key, CAmount amount, uint32_t output_index);
 
 /**
  * Build a delayed vault spend leaf.
@@ -35,6 +38,7 @@ CScript BuildVaultRecoveryLeaf(const CScript& authorization_script, const CScrip
  * exact destination output.
  */
 CScript BuildVaultDelayedSpendLeaf(const CScript& authorization_script, int64_t relative_delay, const CScript& destination_script_pub_key, CAmount amount, uint32_t output_index);
+util::Result<CScript> BuildVaultDelayedSpendLeafChecked(const CScript& authorization_script, int64_t relative_delay, const CScript& destination_script_pub_key, CAmount amount, uint32_t output_index);
 
 /**
  * Build an HTLC claim leaf.
@@ -44,6 +48,7 @@ CScript BuildVaultDelayedSpendLeaf(const CScript& authorization_script, int64_t 
  * preimage and sends the locked value to the exact claim output.
  */
 CScript BuildHtlcClaimLeaf(const CScript& authorization_script, const uint256& secret_hash, const CScript& claim_script_pub_key, CAmount amount, uint32_t output_index);
+util::Result<CScript> BuildHtlcClaimLeafChecked(const CScript& authorization_script, const uint256& secret_hash, const CScript& claim_script_pub_key, CAmount amount, uint32_t output_index);
 
 /**
  * Build an HTLC refund leaf.
@@ -54,6 +59,7 @@ CScript BuildHtlcClaimLeaf(const CScript& authorization_script, const uint256& s
  * output.
  */
 CScript BuildHtlcRefundLeaf(const CScript& authorization_script, int64_t absolute_expiry, const CScript& refund_script_pub_key, CAmount amount, uint32_t output_index);
+util::Result<CScript> BuildHtlcRefundLeafChecked(const CScript& authorization_script, int64_t absolute_expiry, const CScript& refund_script_pub_key, CAmount amount, uint32_t output_index);
 
 /**
  * Build a delivery-versus-payment settlement leaf.
@@ -64,6 +70,13 @@ CScript BuildHtlcRefundLeaf(const CScript& authorization_script, int64_t absolut
  * BTP payment output.
  */
 CScript BuildDvPSettlementLeaf(
+    const CScript& authorization_script,
+    const bitplus::assets::AssetCommitment& asset_transfer,
+    uint32_t asset_output_index,
+    const CScript& payment_script_pub_key,
+    CAmount payment_amount,
+    uint32_t payment_output_index);
+util::Result<CScript> BuildDvPSettlementLeafChecked(
     const CScript& authorization_script,
     const bitplus::assets::AssetCommitment& asset_transfer,
     uint32_t asset_output_index,
@@ -86,6 +99,14 @@ CScript BuildDvPSettlementLeaf(
     const CScript& payment_script_pub_key,
     CAmount payment_amount,
     uint32_t payment_output_index);
+util::Result<CScript> BuildDvPSettlementLeafChecked(
+    const CScript& authorization_script,
+    const bitplus::assets::AssetCommitment& asset_transfer,
+    const CScript& asset_locking_script,
+    uint32_t asset_output_index,
+    const CScript& payment_script_pub_key,
+    CAmount payment_amount,
+    uint32_t payment_output_index);
 
 /**
  * Build a payment-versus-payment settlement leaf.
@@ -95,6 +116,12 @@ CScript BuildDvPSettlementLeaf(
  * transaction to carry two exact asset-transfer commitment outputs.
  */
 CScript BuildPvPSettlementLeaf(
+    const CScript& authorization_script,
+    const bitplus::assets::AssetCommitment& first_asset_transfer,
+    uint32_t first_asset_output_index,
+    const bitplus::assets::AssetCommitment& second_asset_transfer,
+    uint32_t second_asset_output_index);
+util::Result<CScript> BuildPvPSettlementLeafChecked(
     const CScript& authorization_script,
     const bitplus::assets::AssetCommitment& first_asset_transfer,
     uint32_t first_asset_output_index,
@@ -116,6 +143,14 @@ CScript BuildPvPSettlementLeaf(
     const bitplus::assets::AssetCommitment& second_asset_transfer,
     const CScript& second_asset_locking_script,
     uint32_t second_asset_output_index);
+util::Result<CScript> BuildPvPSettlementLeafChecked(
+    const CScript& authorization_script,
+    const bitplus::assets::AssetCommitment& first_asset_transfer,
+    const CScript& first_asset_locking_script,
+    uint32_t first_asset_output_index,
+    const bitplus::assets::AssetCommitment& second_asset_transfer,
+    const CScript& second_asset_locking_script,
+    uint32_t second_asset_output_index);
 
 /**
  * Build a collateral release leaf.
@@ -125,6 +160,7 @@ CScript BuildPvPSettlementLeaf(
  * collateral to the exact release output.
  */
 CScript BuildCollateralReleaseLeaf(const CScript& authorization_script, const CScript& release_script_pub_key, CAmount amount, uint32_t output_index);
+util::Result<CScript> BuildCollateralReleaseLeafChecked(const CScript& authorization_script, const CScript& release_script_pub_key, CAmount amount, uint32_t output_index);
 
 /**
  * Build a delayed collateral return leaf.
@@ -135,6 +171,7 @@ CScript BuildCollateralReleaseLeaf(const CScript& authorization_script, const CS
  * the exact return output.
  */
 CScript BuildCollateralReturnLeaf(const CScript& authorization_script, int64_t relative_delay, const CScript& return_script_pub_key, CAmount amount, uint32_t output_index);
+util::Result<CScript> BuildCollateralReturnLeafChecked(const CScript& authorization_script, int64_t relative_delay, const CScript& return_script_pub_key, CAmount amount, uint32_t output_index);
 
 /**
  * Build an absolute-expiry refund leaf.
@@ -144,6 +181,7 @@ CScript BuildCollateralReturnLeaf(const CScript& authorization_script, int64_t r
  * to satisfy the absolute expiry and refunds to the exact output.
  */
 CScript BuildAbsoluteRefundLeaf(const CScript& authorization_script, int64_t absolute_expiry, const CScript& refund_script_pub_key, CAmount amount, uint32_t output_index);
+util::Result<CScript> BuildAbsoluteRefundLeafChecked(const CScript& authorization_script, int64_t absolute_expiry, const CScript& refund_script_pub_key, CAmount amount, uint32_t output_index);
 
 /**
  * Build a relative-expiry refund leaf.
@@ -153,6 +191,7 @@ CScript BuildAbsoluteRefundLeaf(const CScript& authorization_script, int64_t abs
  * sequence to satisfy the relative delay and refunds to the exact output.
  */
 CScript BuildRelativeRefundLeaf(const CScript& authorization_script, int64_t relative_delay, const CScript& refund_script_pub_key, CAmount amount, uint32_t output_index);
+util::Result<CScript> BuildRelativeRefundLeafChecked(const CScript& authorization_script, int64_t relative_delay, const CScript& refund_script_pub_key, CAmount amount, uint32_t output_index);
 
 } // namespace bitplus::contracts
 

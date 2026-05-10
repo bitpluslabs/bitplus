@@ -41,6 +41,7 @@
 #include <util/check.h>
 #include <util/moneystr.h>
 #include <util/rbf.h>
+#include <util/result.h>
 #include <util/strencodings.h>
 #include <util/string.h>
 #include <util/vector.h>
@@ -188,6 +189,12 @@ static UniValue ContractLeafToJSON(const CScript& script)
     result.pushKV("script", HexStr(script));
     result.pushKV("script_hash", (HashWriter{} << script).GetSHA256().ToString());
     return result;
+}
+
+static CScript CheckedContractScript(util::Result<CScript> script)
+{
+    if (!script) throw JSONRPCError(RPC_INVALID_PARAMETER, util::ErrorString(script).original);
+    return std::move(script.value());
 }
 
 static void PushAssetValidation(UniValue& result, const bitplus::assets::AssetValidationResult& validation)
@@ -5494,14 +5501,14 @@ static RPCMethod createbitplusdvp()
             result.pushKV("members_root", computed_members_root.ToString());
             result.pushKV("transfer", AssetCommitmentToJSON(transfer, transfer_script.script_pub_key));
             result.pushKV("proof", std::move(proof_obj));
-            result.pushKV("settlement_leaf", ContractLeafToJSON(bitplus::contracts::BuildDvPSettlementLeaf(
+            result.pushKV("settlement_leaf", ContractLeafToJSON(CheckedContractScript(bitplus::contracts::BuildDvPSettlementLeafChecked(
                 ParseScriptHex(request.params[0], "authorization_script"),
                 transfer,
                 transfer_script.locking_script,
                 asset_output_index,
                 ParseScriptHex(request.params[9], "payment_script_pub_key"),
                 ParsePositiveBtpAmount(request.params[10], "payment_amount"),
-                ParseOutputIndex(request.params[11], "payment_output_index"))));
+                ParseOutputIndex(request.params[11], "payment_output_index")))));
             return result;
         },
     };
@@ -5646,14 +5653,14 @@ static RPCMethod createbitpluspvp()
             result.pushKV("first_proof", std::move(first_proof_obj));
             result.pushKV("second_transfer", AssetCommitmentToJSON(second_transfer, second_transfer_script.script_pub_key));
             result.pushKV("second_proof", std::move(second_proof_obj));
-            result.pushKV("settlement_leaf", ContractLeafToJSON(bitplus::contracts::BuildPvPSettlementLeaf(
+            result.pushKV("settlement_leaf", ContractLeafToJSON(CheckedContractScript(bitplus::contracts::BuildPvPSettlementLeafChecked(
                 ParseScriptHex(request.params[0], "authorization_script"),
                 first_transfer,
                 first_transfer_script.locking_script,
                 first_proof.asset_output_index,
                 second_transfer,
                 second_transfer_script.locking_script,
-                second_proof.asset_output_index)));
+                second_proof.asset_output_index))));
             return result;
         },
     };
@@ -5688,17 +5695,17 @@ static RPCMethod createbitplusvault()
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue {
             const CScript authorization_script{ParseScriptHex(request.params[0], "authorization_script")};
             UniValue result{UniValue::VOBJ};
-            result.pushKV("recovery_leaf", ContractLeafToJSON(bitplus::contracts::BuildVaultRecoveryLeaf(
+            result.pushKV("recovery_leaf", ContractLeafToJSON(CheckedContractScript(bitplus::contracts::BuildVaultRecoveryLeafChecked(
                 authorization_script,
                 ParseScriptHex(request.params[1], "recovery_script_pub_key"),
                 ParsePositiveBtpAmount(request.params[2], "recovery_amount"),
-                ParseOutputIndex(request.params[3], "recovery_output_index"))));
-            result.pushKV("delayed_spend_leaf", ContractLeafToJSON(bitplus::contracts::BuildVaultDelayedSpendLeaf(
+                ParseOutputIndex(request.params[3], "recovery_output_index")))));
+            result.pushKV("delayed_spend_leaf", ContractLeafToJSON(CheckedContractScript(bitplus::contracts::BuildVaultDelayedSpendLeafChecked(
                 authorization_script,
                 ParseNonNegativeInt64(request.params[4], "relative_delay"),
                 ParseScriptHex(request.params[5], "destination_script_pub_key"),
                 ParsePositiveBtpAmount(request.params[6], "destination_amount"),
-                ParseOutputIndex(request.params[7], "destination_output_index"))));
+                ParseOutputIndex(request.params[7], "destination_output_index")))));
             return result;
         },
     };
@@ -5734,18 +5741,18 @@ static RPCMethod createbitplushtlc()
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue {
             const CScript authorization_script{ParseScriptHex(request.params[0], "authorization_script")};
             UniValue result{UniValue::VOBJ};
-            result.pushKV("claim_leaf", ContractLeafToJSON(bitplus::contracts::BuildHtlcClaimLeaf(
+            result.pushKV("claim_leaf", ContractLeafToJSON(CheckedContractScript(bitplus::contracts::BuildHtlcClaimLeafChecked(
                 authorization_script,
                 ParseNonNullHash(request.params[1], "secret_hash"),
                 ParseScriptHex(request.params[2], "claim_script_pub_key"),
                 ParsePositiveBtpAmount(request.params[3], "claim_amount"),
-                ParseOutputIndex(request.params[4], "claim_output_index"))));
-            result.pushKV("refund_leaf", ContractLeafToJSON(bitplus::contracts::BuildHtlcRefundLeaf(
+                ParseOutputIndex(request.params[4], "claim_output_index")))));
+            result.pushKV("refund_leaf", ContractLeafToJSON(CheckedContractScript(bitplus::contracts::BuildHtlcRefundLeafChecked(
                 authorization_script,
                 ParseNonNegativeInt64(request.params[5], "absolute_expiry"),
                 ParseScriptHex(request.params[6], "refund_script_pub_key"),
                 ParsePositiveBtpAmount(request.params[7], "refund_amount"),
-                ParseOutputIndex(request.params[8], "refund_output_index"))));
+                ParseOutputIndex(request.params[8], "refund_output_index")))));
             return result;
         },
     };
@@ -5780,17 +5787,17 @@ static RPCMethod createbitpluscollateral()
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue {
             const CScript authorization_script{ParseScriptHex(request.params[0], "authorization_script")};
             UniValue result{UniValue::VOBJ};
-            result.pushKV("release_leaf", ContractLeafToJSON(bitplus::contracts::BuildCollateralReleaseLeaf(
+            result.pushKV("release_leaf", ContractLeafToJSON(CheckedContractScript(bitplus::contracts::BuildCollateralReleaseLeafChecked(
                 authorization_script,
                 ParseScriptHex(request.params[1], "release_script_pub_key"),
                 ParsePositiveBtpAmount(request.params[2], "release_amount"),
-                ParseOutputIndex(request.params[3], "release_output_index"))));
-            result.pushKV("return_leaf", ContractLeafToJSON(bitplus::contracts::BuildCollateralReturnLeaf(
+                ParseOutputIndex(request.params[3], "release_output_index")))));
+            result.pushKV("return_leaf", ContractLeafToJSON(CheckedContractScript(bitplus::contracts::BuildCollateralReturnLeafChecked(
                 authorization_script,
                 ParseNonNegativeInt64(request.params[4], "relative_delay"),
                 ParseScriptHex(request.params[5], "return_script_pub_key"),
                 ParsePositiveBtpAmount(request.params[6], "return_amount"),
-                ParseOutputIndex(request.params[7], "return_output_index"))));
+                ParseOutputIndex(request.params[7], "return_output_index")))));
             return result;
         },
     };
@@ -5826,18 +5833,18 @@ static RPCMethod createbitplusrefundpaths()
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue {
             const CScript authorization_script{ParseScriptHex(request.params[0], "authorization_script")};
             UniValue result{UniValue::VOBJ};
-            result.pushKV("absolute_refund_leaf", ContractLeafToJSON(bitplus::contracts::BuildAbsoluteRefundLeaf(
+            result.pushKV("absolute_refund_leaf", ContractLeafToJSON(CheckedContractScript(bitplus::contracts::BuildAbsoluteRefundLeafChecked(
                 authorization_script,
                 ParseNonNegativeInt64(request.params[1], "absolute_expiry"),
                 ParseScriptHex(request.params[2], "absolute_refund_script_pub_key"),
                 ParsePositiveBtpAmount(request.params[3], "absolute_refund_amount"),
-                ParseOutputIndex(request.params[4], "absolute_refund_output_index"))));
-            result.pushKV("relative_refund_leaf", ContractLeafToJSON(bitplus::contracts::BuildRelativeRefundLeaf(
+                ParseOutputIndex(request.params[4], "absolute_refund_output_index")))));
+            result.pushKV("relative_refund_leaf", ContractLeafToJSON(CheckedContractScript(bitplus::contracts::BuildRelativeRefundLeafChecked(
                 authorization_script,
                 ParseNonNegativeInt64(request.params[5], "relative_delay"),
                 ParseScriptHex(request.params[6], "relative_refund_script_pub_key"),
                 ParsePositiveBtpAmount(request.params[7], "relative_refund_amount"),
-                ParseOutputIndex(request.params[8], "relative_refund_output_index"))));
+                ParseOutputIndex(request.params[8], "relative_refund_output_index")))));
             return result;
         },
     };
@@ -5859,10 +5866,10 @@ static RPCMethod createbitpluscovleaf()
         }},
         RPCExamples{HelpExampleCli("createbitpluscovleaf", "\"script_pub_key\" 1.0 0")},
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue {
-            return ContractLeafToJSON(bitplus::contracts::BuildCheckOutputVerifyScript(
+            return ContractLeafToJSON(CheckedContractScript(bitplus::contracts::BuildCheckOutputVerifyScriptChecked(
                 ParseScriptHex(request.params[0], "script_pub_key"),
                 ParsePositiveBtpAmount(request.params[1], "amount"),
-                ParseOutputIndex(request.params[2], "output_index")));
+                ParseOutputIndex(request.params[2], "output_index"))));
         },
     };
 }
@@ -5884,11 +5891,11 @@ static RPCMethod createbitplusvaultrecoveryleaf()
         }},
         RPCExamples{HelpExampleCli("createbitplusvaultrecoveryleaf", "\"auth_script\" \"recovery_script_pub_key\" 1.0 0")},
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue {
-            return ContractLeafToJSON(bitplus::contracts::BuildVaultRecoveryLeaf(
+            return ContractLeafToJSON(CheckedContractScript(bitplus::contracts::BuildVaultRecoveryLeafChecked(
                 ParseScriptHex(request.params[0], "authorization_script"),
                 ParseScriptHex(request.params[1], "recovery_script_pub_key"),
                 ParsePositiveBtpAmount(request.params[2], "amount"),
-                ParseOutputIndex(request.params[3], "output_index")));
+                ParseOutputIndex(request.params[3], "output_index"))));
         },
     };
 }
@@ -5911,12 +5918,12 @@ static RPCMethod createbitplusvaultdelayedleaf()
         }},
         RPCExamples{HelpExampleCli("createbitplusvaultdelayedleaf", "\"auth_script\" 144 \"destination_script_pub_key\" 1.0 0")},
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue {
-            return ContractLeafToJSON(bitplus::contracts::BuildVaultDelayedSpendLeaf(
+            return ContractLeafToJSON(CheckedContractScript(bitplus::contracts::BuildVaultDelayedSpendLeafChecked(
                 ParseScriptHex(request.params[0], "authorization_script"),
                 ParseNonNegativeInt64(request.params[1], "relative_delay"),
                 ParseScriptHex(request.params[2], "destination_script_pub_key"),
                 ParsePositiveBtpAmount(request.params[3], "amount"),
-                ParseOutputIndex(request.params[4], "output_index")));
+                ParseOutputIndex(request.params[4], "output_index"))));
         },
     };
 }
@@ -5939,12 +5946,12 @@ static RPCMethod createbitplushtlcclaimleaf()
         }},
         RPCExamples{HelpExampleCli("createbitplushtlcclaimleaf", "\"auth_script\" \"secret_hash\" \"claim_script_pub_key\" 1.0 0")},
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue {
-            return ContractLeafToJSON(bitplus::contracts::BuildHtlcClaimLeaf(
+            return ContractLeafToJSON(CheckedContractScript(bitplus::contracts::BuildHtlcClaimLeafChecked(
                 ParseScriptHex(request.params[0], "authorization_script"),
                 ParseNonNullHash(request.params[1], "secret_hash"),
                 ParseScriptHex(request.params[2], "claim_script_pub_key"),
                 ParsePositiveBtpAmount(request.params[3], "amount"),
-                ParseOutputIndex(request.params[4], "output_index")));
+                ParseOutputIndex(request.params[4], "output_index"))));
         },
     };
 }
@@ -5967,12 +5974,12 @@ static RPCMethod createbitplushtlcrefundleaf()
         }},
         RPCExamples{HelpExampleCli("createbitplushtlcrefundleaf", "\"auth_script\" 900000 \"refund_script_pub_key\" 1.0 0")},
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue {
-            return ContractLeafToJSON(bitplus::contracts::BuildHtlcRefundLeaf(
+            return ContractLeafToJSON(CheckedContractScript(bitplus::contracts::BuildHtlcRefundLeafChecked(
                 ParseScriptHex(request.params[0], "authorization_script"),
                 ParseNonNegativeInt64(request.params[1], "absolute_expiry"),
                 ParseScriptHex(request.params[2], "refund_script_pub_key"),
                 ParsePositiveBtpAmount(request.params[3], "amount"),
-                ParseOutputIndex(request.params[4], "output_index")));
+                ParseOutputIndex(request.params[4], "output_index"))));
         },
     };
 }
@@ -6006,14 +6013,14 @@ static RPCMethod createbitplusdvpleaf()
             const AssetScriptWithLocking transfer_script{
                 BuildAssetScriptWithOptionalLockingScript(transfer, request.params[9], "asset_locking_script")
             };
-            return ContractLeafToJSON(bitplus::contracts::BuildDvPSettlementLeaf(
+            return ContractLeafToJSON(CheckedContractScript(bitplus::contracts::BuildDvPSettlementLeafChecked(
                 ParseScriptHex(request.params[0], "authorization_script"),
                 transfer,
                 transfer_script.locking_script,
                 ParseOutputIndex(request.params[5], "asset_output_index"),
                 ParseScriptHex(request.params[6], "payment_script_pub_key"),
                 ParsePositiveBtpAmount(request.params[7], "payment_amount"),
-                ParseOutputIndex(request.params[8], "payment_output_index")));
+                ParseOutputIndex(request.params[8], "payment_output_index"))));
         },
     };
 }
@@ -6056,14 +6063,14 @@ static RPCMethod createbitpluspvpleaf()
             const AssetScriptWithLocking second_transfer_script{
                 BuildAssetScriptWithOptionalLockingScript(second_transfer, request.params[12], "second_asset_locking_script")
             };
-            return ContractLeafToJSON(bitplus::contracts::BuildPvPSettlementLeaf(
+            return ContractLeafToJSON(CheckedContractScript(bitplus::contracts::BuildPvPSettlementLeafChecked(
                 ParseScriptHex(request.params[0], "authorization_script"),
                 first_transfer,
                 first_transfer_script.locking_script,
                 ParseOutputIndex(request.params[5], "first_asset_output_index"),
                 second_transfer,
                 second_transfer_script.locking_script,
-                ParseOutputIndex(request.params[10], "second_asset_output_index")));
+                ParseOutputIndex(request.params[10], "second_asset_output_index"))));
         },
     };
 }
@@ -6085,11 +6092,11 @@ static RPCMethod createbitpluscollateralreleaseleaf()
         }},
         RPCExamples{HelpExampleCli("createbitpluscollateralreleaseleaf", "\"auth_script\" \"release_script_pub_key\" 1.0 0")},
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue {
-            return ContractLeafToJSON(bitplus::contracts::BuildCollateralReleaseLeaf(
+            return ContractLeafToJSON(CheckedContractScript(bitplus::contracts::BuildCollateralReleaseLeafChecked(
                 ParseScriptHex(request.params[0], "authorization_script"),
                 ParseScriptHex(request.params[1], "release_script_pub_key"),
                 ParsePositiveBtpAmount(request.params[2], "amount"),
-                ParseOutputIndex(request.params[3], "output_index")));
+                ParseOutputIndex(request.params[3], "output_index"))));
         },
     };
 }
@@ -6112,12 +6119,12 @@ static RPCMethod createbitpluscollateralreturnleaf()
         }},
         RPCExamples{HelpExampleCli("createbitpluscollateralreturnleaf", "\"auth_script\" 144 \"return_script_pub_key\" 1.0 0")},
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue {
-            return ContractLeafToJSON(bitplus::contracts::BuildCollateralReturnLeaf(
+            return ContractLeafToJSON(CheckedContractScript(bitplus::contracts::BuildCollateralReturnLeafChecked(
                 ParseScriptHex(request.params[0], "authorization_script"),
                 ParseNonNegativeInt64(request.params[1], "relative_delay"),
                 ParseScriptHex(request.params[2], "return_script_pub_key"),
                 ParsePositiveBtpAmount(request.params[3], "amount"),
-                ParseOutputIndex(request.params[4], "output_index")));
+                ParseOutputIndex(request.params[4], "output_index"))));
         },
     };
 }
@@ -6140,12 +6147,12 @@ static RPCMethod createbitplusrefundabsoluteleaf()
         }},
         RPCExamples{HelpExampleCli("createbitplusrefundabsoluteleaf", "\"auth_script\" 900000 \"refund_script_pub_key\" 1.0 0")},
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue {
-            return ContractLeafToJSON(bitplus::contracts::BuildAbsoluteRefundLeaf(
+            return ContractLeafToJSON(CheckedContractScript(bitplus::contracts::BuildAbsoluteRefundLeafChecked(
                 ParseScriptHex(request.params[0], "authorization_script"),
                 ParseNonNegativeInt64(request.params[1], "absolute_expiry"),
                 ParseScriptHex(request.params[2], "refund_script_pub_key"),
                 ParsePositiveBtpAmount(request.params[3], "amount"),
-                ParseOutputIndex(request.params[4], "output_index")));
+                ParseOutputIndex(request.params[4], "output_index"))));
         },
     };
 }
@@ -6168,12 +6175,12 @@ static RPCMethod createbitplusrefundrelativeleaf()
         }},
         RPCExamples{HelpExampleCli("createbitplusrefundrelativeleaf", "\"auth_script\" 144 \"refund_script_pub_key\" 1.0 0")},
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue {
-            return ContractLeafToJSON(bitplus::contracts::BuildRelativeRefundLeaf(
+            return ContractLeafToJSON(CheckedContractScript(bitplus::contracts::BuildRelativeRefundLeafChecked(
                 ParseScriptHex(request.params[0], "authorization_script"),
                 ParseNonNegativeInt64(request.params[1], "relative_delay"),
                 ParseScriptHex(request.params[2], "refund_script_pub_key"),
                 ParsePositiveBtpAmount(request.params[3], "amount"),
-                ParseOutputIndex(request.params[4], "output_index")));
+                ParseOutputIndex(request.params[4], "output_index"))));
         },
     };
 }

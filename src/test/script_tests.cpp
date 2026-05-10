@@ -1093,6 +1093,53 @@ BOOST_AUTO_TEST_CASE(script_vault_templates)
     BOOST_CHECK_EQUAL(err, SCRIPT_ERR_UNSATISFIED_LOCKTIME);
 }
 
+BOOST_AUTO_TEST_CASE(script_contract_checked_builders)
+{
+    const CScript auth_script{CScript{} << OP_TRUE};
+    const CScript output_script{CScript{} << OP_1};
+
+    auto empty_auth{bitplus::contracts::BuildVaultRecoveryLeafChecked(CScript{}, output_script, 1, 0)};
+    BOOST_CHECK(!empty_auth);
+    BOOST_CHECK_EQUAL(util::ErrorString(empty_auth).original, "authorization_script must not be empty");
+
+    auto negative_amount{bitplus::contracts::BuildCheckOutputVerifyScriptChecked(output_script, -1, 0)};
+    BOOST_CHECK(!negative_amount);
+    BOOST_CHECK_EQUAL(util::ErrorString(negative_amount).original, "amount must be non-negative");
+
+    auto zero_btp_amount{bitplus::contracts::BuildCollateralReleaseLeafChecked(auth_script, output_script, 0, 0)};
+    BOOST_CHECK(!zero_btp_amount);
+    BOOST_CHECK_EQUAL(util::ErrorString(zero_btp_amount).original, "amount must be greater than zero");
+
+    auto negative_delay{bitplus::contracts::BuildVaultDelayedSpendLeafChecked(auth_script, -1, output_script, 1, 0)};
+    BOOST_CHECK(!negative_delay);
+    BOOST_CHECK_EQUAL(util::ErrorString(negative_delay).original, "relative_delay must be non-negative");
+
+    auto null_secret{bitplus::contracts::BuildHtlcClaimLeafChecked(auth_script, uint256{}, output_script, 1, 0)};
+    BOOST_CHECK(!null_secret);
+    BOOST_CHECK_EQUAL(util::ErrorString(null_secret).original, "secret_hash must not be null");
+
+    bitplus::assets::AssetCommitment transfer{
+        .type = bitplus::assets::AssetCommitmentType::TRANSFER,
+        .asset_id = uint256{1},
+        .amount = 1,
+        .metadata_hash = uint256{2},
+        .member_hash = uint256{3},
+    };
+    auto unspendable_asset_lock{bitplus::contracts::BuildDvPSettlementLeafChecked(
+        auth_script,
+        transfer,
+        CScript{} << OP_RETURN,
+        0,
+        output_script,
+        1,
+        1)};
+    BOOST_CHECK(!unspendable_asset_lock);
+    BOOST_CHECK_EQUAL(util::ErrorString(unspendable_asset_lock).original, "asset_locking_script must be spendable");
+
+    auto valid_dvp{bitplus::contracts::BuildDvPSettlementLeafChecked(auth_script, transfer, 0, output_script, 1, 1)};
+    BOOST_CHECK(valid_dvp);
+}
+
 BOOST_AUTO_TEST_CASE(script_asset_commitments)
 {
     bitplus::assets::AssetWhitelistCommitment whitelist{

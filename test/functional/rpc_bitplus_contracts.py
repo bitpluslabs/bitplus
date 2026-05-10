@@ -1121,6 +1121,8 @@ class BitplusContractsRPCTest(BitplusTestFramework):
         assert_raises_rpc_error(-8, "asset-locking-script-unspendable", node.createbitplusasset, "transfer", asset_id, 100, metadata["commitment_hash"], HASH_E, "6a")
         assert_raises_rpc_error(-8, "asset-whitelist-proof-member-null", node.createbitplusassetwhitelistproof, 0, NULL_HASH, 0, [])
         assert_raises_rpc_error(-8, "asset-id-null", node.createbitplusdvpleaf, AUTH_SCRIPT, NULL_HASH, 100, metadata["commitment_hash"], HASH_E, 0, OUTPUT_SCRIPT, "1.00000000", 1)
+        assert_raises_rpc_error(-8, "authorization_script must be hexadecimal string", node.createbitplusvaultrecoveryleaf, "", OUTPUT_SCRIPT, "1.00000000", 0)
+        assert_raises_rpc_error(-8, "asset-locking-script-unspendable", node.createbitplusdvpleaf, AUTH_SCRIPT, asset_id, 100, metadata["commitment_hash"], HASH_E, 0, OUTPUT_SCRIPT, "1.00000000", 1, "6a")
         assert_raises_rpc_error(-8, "amount must be greater than zero", node.createbitpluscovleaf, OUTPUT_SCRIPT, "0.00000000", 0)
         assert_raises_rpc_error(-8, "output_index out of range", node.createbitpluscovleaf, OUTPUT_SCRIPT, "1.00000000", -1)
         assert_raises_rpc_error(-8, "outputs must not be empty", node.createbitplusscripttransaction, [{"txid": HASH_D, "vout": 0}], [])

@@ -650,6 +650,12 @@ present; native asset conservation, metadata, and whitelist rules are enforced
 by the separate Bitplus asset consensus checks when institutional contracts are
 active.
 
+The raw C++ template builders are intentionally small script constructors.
+Checked builder variants are available for RPC and integration use; they reject
+empty authorization/output scripts, negative or out-of-range amounts, negative
+lock values, null HTLC secrets, and invalid custom asset locking scripts before
+returning a leaf.
+
 ## Asset Metadata Commitment Format
 
 Asset metadata is committed separately from asset transfer records. The asset

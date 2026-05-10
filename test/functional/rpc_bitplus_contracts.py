@@ -33,6 +33,8 @@ HASH_E = "55" * 32
 NULL_HASH = "00" * 32
 AUTH_SCRIPT = "51"
 OUTPUT_SCRIPT = "51"
+CUSTOM_ASSET_LOCK_A = "51"
+CUSTOM_ASSET_LOCK_B = "52"
 
 
 def assert_hex_hash(value):
@@ -105,6 +107,11 @@ class BitplusContractsRPCTest(BitplusTestFramework):
         assert_hex_hash(dvp["proof"]["commitment_hash"])
         assert_contract_leaf(dvp["settlement_leaf"])
 
+        custom_dvp = node.createbitplusdvp(AUTH_SCRIPT, asset_id, 100, metadata["commitment_hash"], HASH_C, 0, 2, root["merkle_path"], root["members_root"], OUTPUT_SCRIPT, "1.00000000", 1, CUSTOM_ASSET_LOCK_A)
+        assert_equal(custom_dvp["transfer"]["asset_id"], asset_id)
+        assert_contract_leaf(custom_dvp["settlement_leaf"])
+        assert custom_dvp["transfer"]["scriptPubKey"] != dvp["transfer"]["scriptPubKey"]
+
         pvp = node.createbitpluspvp(AUTH_SCRIPT, asset_id, 100, metadata["commitment_hash"], HASH_C, 0, 2, root["merkle_path"], root["members_root"], asset_id, 50, metadata["commitment_hash"], HASH_C, 1, 2, root["merkle_path"], root["members_root"])
         assert_equal(pvp["first_transfer"]["asset_id"], asset_id)
         assert_hex_hash(pvp["first_transfer"]["commitment_hash"])
@@ -115,6 +122,11 @@ class BitplusContractsRPCTest(BitplusTestFramework):
         assert_equal(pvp["second_proof"]["members_root"], root["members_root"])
         assert_hex_hash(pvp["second_proof"]["commitment_hash"])
         assert_contract_leaf(pvp["settlement_leaf"])
+
+        custom_pvp = node.createbitpluspvp(AUTH_SCRIPT, asset_id, 100, metadata["commitment_hash"], HASH_C, 0, 2, root["merkle_path"], root["members_root"], asset_id, 50, metadata["commitment_hash"], HASH_C, 1, 2, root["merkle_path"], root["members_root"], CUSTOM_ASSET_LOCK_A, CUSTOM_ASSET_LOCK_B)
+        assert_contract_leaf(custom_pvp["settlement_leaf"])
+        assert custom_pvp["first_transfer"]["scriptPubKey"] != pvp["first_transfer"]["scriptPubKey"]
+        assert custom_pvp["second_transfer"]["scriptPubKey"] != pvp["second_transfer"]["scriptPubKey"]
 
         burn = node.createbitplusassetburn(asset_id, 25, metadata["commitment_hash"], HASH_C)
         assert_equal(burn["asset_id"], asset_id)
@@ -137,6 +149,9 @@ class BitplusContractsRPCTest(BitplusTestFramework):
             transfer["transfer"]["scriptPubKey"],
             transfer["proof"]["scriptPubKey"],
             burn["scriptPubKey"],
+            custom_dvp["transfer"]["scriptPubKey"],
+            custom_pvp["first_transfer"]["scriptPubKey"],
+            custom_pvp["second_transfer"]["scriptPubKey"],
         ))
         decoded_asset = decoded["vout"][0]["scriptPubKey"]["bitplus_asset"]
         assert_equal(decoded_asset["format"], "BTPASSET")
@@ -147,6 +162,15 @@ class BitplusContractsRPCTest(BitplusTestFramework):
         assert_equal(decoded_asset["member_hash"], HASH_E)
         assert_equal(decoded_asset["commitment_hash"], asset["commitment_hash"])
         assert_equal(decoded_asset["locking_script"]["hex"], "a820" + HASH_E + "87")
+
+        decoded_custom_dvp_asset = decoded["vout"][8]["scriptPubKey"]["bitplus_asset"]
+        assert_equal(decoded_custom_dvp_asset["locking_script"]["hex"], CUSTOM_ASSET_LOCK_A)
+
+        decoded_custom_pvp_first_asset = decoded["vout"][9]["scriptPubKey"]["bitplus_asset"]
+        assert_equal(decoded_custom_pvp_first_asset["locking_script"]["hex"], CUSTOM_ASSET_LOCK_A)
+
+        decoded_custom_pvp_second_asset = decoded["vout"][10]["scriptPubKey"]["bitplus_asset"]
+        assert_equal(decoded_custom_pvp_second_asset["locking_script"]["hex"], CUSTOM_ASSET_LOCK_B)
 
         decoded_metadata = decoded["vout"][1]["scriptPubKey"]["bitplus_asset_metadata"]
         assert_equal(decoded_metadata["format"], "BTPMETA")
@@ -1074,7 +1098,9 @@ class BitplusContractsRPCTest(BitplusTestFramework):
         assert_contract_leaf(node.createbitplushtlcclaimleaf(AUTH_SCRIPT, HASH_A, OUTPUT_SCRIPT, "1.00000000", 0))
         assert_contract_leaf(node.createbitplushtlcrefundleaf(AUTH_SCRIPT, 900000, OUTPUT_SCRIPT, "1.00000000", 0))
         assert_contract_leaf(node.createbitplusdvpleaf(AUTH_SCRIPT, asset_id, 100, metadata["commitment_hash"], HASH_E, 0, OUTPUT_SCRIPT, "1.00000000", 1))
+        assert_contract_leaf(node.createbitplusdvpleaf(AUTH_SCRIPT, asset_id, 100, metadata["commitment_hash"], HASH_E, 0, OUTPUT_SCRIPT, "1.00000000", 1, CUSTOM_ASSET_LOCK_A))
         assert_contract_leaf(node.createbitpluspvpleaf(AUTH_SCRIPT, asset_id, 100, metadata["commitment_hash"], HASH_E, 0, asset_id, 50, metadata["commitment_hash"], HASH_E, 1))
+        assert_contract_leaf(node.createbitpluspvpleaf(AUTH_SCRIPT, asset_id, 100, metadata["commitment_hash"], HASH_E, 0, asset_id, 50, metadata["commitment_hash"], HASH_E, 1, CUSTOM_ASSET_LOCK_A, CUSTOM_ASSET_LOCK_B))
         assert_contract_leaf(node.createbitpluscollateralreleaseleaf(AUTH_SCRIPT, OUTPUT_SCRIPT, "1.00000000", 0))
         assert_contract_leaf(node.createbitpluscollateralreturnleaf(AUTH_SCRIPT, 144, OUTPUT_SCRIPT, "1.00000000", 0))
         assert_contract_leaf(node.createbitplusrefundabsoluteleaf(AUTH_SCRIPT, 900000, OUTPUT_SCRIPT, "1.00000000", 0))

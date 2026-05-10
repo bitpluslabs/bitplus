@@ -56,6 +56,8 @@ HTLC_BAD_SECRET = b"bitplus wrong htlc preimage"
 HTLC_SECRET_HASH = hashlib.sha256(HTLC_SECRET).digest()[::-1].hex()
 ZERO_BTP = 0
 TRANSFER_VOUT = 4
+CUSTOM_ASSET_LOCK_A = "52"
+CUSTOM_ASSET_LOCK_B = "53"
 
 
 def control_block(tap, leaf_name):
@@ -186,9 +188,9 @@ class BitplusCovenantsTest(BitplusTestFramework):
     def asset_input(self, issuance_tx):
         return CTxIn(COutPoint(int(issuance_tx.txid_hex, 16), TRANSFER_VOUT), scriptSig=asset_unlock_script())
 
-    def build_dvp_spend(self, funding, tap, issuance_tx, issuance, root, *, payment_amount=DVP_PAYMENT_AMOUNT, include_proof=True):
+    def build_dvp_spend(self, funding, tap, issuance_tx, issuance, root, *, payment_amount=DVP_PAYMENT_AMOUNT, include_proof=True, asset_locking_script=None):
         node = self.nodes[0]
-        dvp = node.createbitplusdvp(
+        dvp_args = [
             "51",
             issuance["asset_id"],
             300,
@@ -201,7 +203,10 @@ class BitplusCovenantsTest(BitplusTestFramework):
             CScript([OP_TRUE]).hex(),
             f"{DVP_PAYMENT_AMOUNT / 100_000_000:.8f}",
             1,
-        )
+        ]
+        if asset_locking_script is not None:
+            dvp_args.append(asset_locking_script)
+        dvp = node.createbitplusdvp(*dvp_args)
         burn = node.createbitplusassetburn(issuance["asset_id"], 200, issuance["metadata"]["commitment_hash"], MEMBER_HASH)
 
         tx = CTransaction()
@@ -222,10 +227,10 @@ class BitplusCovenantsTest(BitplusTestFramework):
         self.attach_taproot_script_witness(tx, 1, tap, "dvp")
         return tx
 
-    def build_pvp_spend(self, funding, tap, first_issuance_tx, first_issuance, first_root, second_issuance_tx, second_issuance, second_root, *, wrong_second_index=False, include_second_proof=True):
+    def build_pvp_spend(self, funding, tap, first_issuance_tx, first_issuance, first_root, second_issuance_tx, second_issuance, second_root, *, wrong_second_index=False, include_second_proof=True, first_asset_locking_script=None, second_asset_locking_script=None):
         node = self.nodes[0]
         second_output_index = 2 if wrong_second_index else 1
-        first_transfer = node.createbitplusassettransfer(
+        first_transfer_args = [
             first_issuance["asset_id"],
             500,
             first_issuance["metadata"]["commitment_hash"],
@@ -234,8 +239,12 @@ class BitplusCovenantsTest(BitplusTestFramework):
             0,
             first_root["merkle_path"],
             first_root["members_root"],
-        )
-        second_transfer = node.createbitplusassettransfer(
+        ]
+        if first_asset_locking_script is not None:
+            first_transfer_args.append(first_asset_locking_script)
+        first_transfer = node.createbitplusassettransfer(*first_transfer_args)
+
+        second_transfer_args = [
             second_issuance["asset_id"],
             500,
             second_issuance["metadata"]["commitment_hash"],
@@ -244,7 +253,10 @@ class BitplusCovenantsTest(BitplusTestFramework):
             0,
             second_root["merkle_path"],
             second_root["members_root"],
-        )
+        ]
+        if second_asset_locking_script is not None:
+            second_transfer_args.append(second_asset_locking_script)
+        second_transfer = node.createbitplusassettransfer(*second_transfer_args)
 
         tx = CTransaction()
         tx.version = 2
@@ -631,6 +643,38 @@ class BitplusCovenantsTest(BitplusTestFramework):
         good_dvp = self.build_dvp_spend(dvp_funding, dvp_tap, dvp_issuance_tx, dvp_issuance, dvp_root)
         self.assert_accept_and_mine(good_dvp)
 
+        self.log.info("Accept and mine atomic DvP settlement with custom asset locking script")
+        custom_dvp_issuance_tx, custom_dvp_issuance, custom_dvp_root = self.issue_asset(wallet)
+        custom_dvp = node.createbitplusdvp(
+            "51",
+            custom_dvp_issuance["asset_id"],
+            300,
+            custom_dvp_issuance["metadata"]["commitment_hash"],
+            MEMBER_HASH,
+            0,
+            0,
+            custom_dvp_root["merkle_path"],
+            custom_dvp_root["members_root"],
+            CScript([OP_TRUE]).hex(),
+            f"{DVP_PAYMENT_AMOUNT / 100_000_000:.8f}",
+            1,
+            CUSTOM_ASSET_LOCK_A,
+        )
+        custom_dvp_internal_key = compute_xonly_pubkey(hash256(b"bitplus custom dvp internal key"))[0]
+        custom_dvp_tap = taproot_construct(custom_dvp_internal_key, [
+            ("dvp", CScript(bytes.fromhex(custom_dvp["settlement_leaf"]["script"])), LEAF_VERSION_TAPSCRIPT),
+        ])
+        custom_dvp_funding = self.fund_taproot(wallet, custom_dvp_tap)
+        custom_dvp_spend = self.build_dvp_spend(
+            custom_dvp_funding,
+            custom_dvp_tap,
+            custom_dvp_issuance_tx,
+            custom_dvp_issuance,
+            custom_dvp_root,
+            asset_locking_script=CUSTOM_ASSET_LOCK_A,
+        )
+        self.assert_accept_and_mine(custom_dvp_spend)
+
         self.log.info("Issue asset pair for PvP settlement")
         first_pvp_issuance_tx, first_pvp_issuance, first_pvp_root = self.issue_asset(wallet)
         second_pvp_issuance_tx, second_pvp_issuance, second_pvp_root = self.issue_asset(wallet)
@@ -700,6 +744,49 @@ class BitplusCovenantsTest(BitplusTestFramework):
             second_pvp_root,
         )
         self.assert_accept_and_mine(good_pvp)
+
+        self.log.info("Accept and mine atomic PvP settlement with custom asset locking scripts")
+        first_custom_pvp_issuance_tx, first_custom_pvp_issuance, first_custom_pvp_root = self.issue_asset(wallet)
+        second_custom_pvp_issuance_tx, second_custom_pvp_issuance, second_custom_pvp_root = self.issue_asset(wallet)
+        custom_pvp = node.createbitpluspvp(
+            "51",
+            first_custom_pvp_issuance["asset_id"],
+            500,
+            first_custom_pvp_issuance["metadata"]["commitment_hash"],
+            MEMBER_HASH,
+            0,
+            0,
+            first_custom_pvp_root["merkle_path"],
+            first_custom_pvp_root["members_root"],
+            second_custom_pvp_issuance["asset_id"],
+            500,
+            second_custom_pvp_issuance["metadata"]["commitment_hash"],
+            MEMBER_HASH,
+            1,
+            0,
+            second_custom_pvp_root["merkle_path"],
+            second_custom_pvp_root["members_root"],
+            CUSTOM_ASSET_LOCK_A,
+            CUSTOM_ASSET_LOCK_B,
+        )
+        custom_pvp_internal_key = compute_xonly_pubkey(hash256(b"bitplus custom pvp internal key"))[0]
+        custom_pvp_tap = taproot_construct(custom_pvp_internal_key, [
+            ("pvp", CScript(bytes.fromhex(custom_pvp["settlement_leaf"]["script"])), LEAF_VERSION_TAPSCRIPT),
+        ])
+        custom_pvp_funding = self.fund_taproot(wallet, custom_pvp_tap)
+        custom_pvp_spend = self.build_pvp_spend(
+            custom_pvp_funding,
+            custom_pvp_tap,
+            first_custom_pvp_issuance_tx,
+            first_custom_pvp_issuance,
+            first_custom_pvp_root,
+            second_custom_pvp_issuance_tx,
+            second_custom_pvp_issuance,
+            second_custom_pvp_root,
+            first_asset_locking_script=CUSTOM_ASSET_LOCK_A,
+            second_asset_locking_script=CUSTOM_ASSET_LOCK_B,
+        )
+        self.assert_accept_and_mine(custom_pvp_spend)
 
 
 if __name__ == "__main__":

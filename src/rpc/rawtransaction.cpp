@@ -142,6 +142,29 @@ static void ValidateConstructedAssetScript(const CScript& script_pub_key)
     ThrowIfInvalidAssetResult(bitplus::assets::ValidateAssetOutput(*output));
 }
 
+struct AssetScriptWithLocking {
+    CScript script_pub_key;
+    CScript locking_script;
+};
+
+static AssetScriptWithLocking BuildAssetScriptWithOptionalLockingScript(
+    const bitplus::assets::AssetCommitment& commitment,
+    const UniValue& locking_script,
+    std::string_view locking_script_name)
+{
+    CScript inner_locking_script;
+    if (locking_script.isNull()) {
+        inner_locking_script = bitplus::assets::BuildDefaultAssetLockingScript(commitment);
+    } else {
+        const std::vector<unsigned char> locking_script_bytes{ParseHexV(locking_script, locking_script_name)};
+        inner_locking_script = CScript{locking_script_bytes.begin(), locking_script_bytes.end()};
+    }
+
+    CScript script_pub_key{bitplus::assets::BuildAssetCommitmentScript(commitment, inner_locking_script)};
+    ValidateConstructedAssetScript(script_pub_key);
+    return {.script_pub_key = std::move(script_pub_key), .locking_script = std::move(inner_locking_script)};
+}
+
 static bitplus::assets::AssetCommitment ParseTransferCommitment(
     const UniValue& asset_id,
     const UniValue& amount,
@@ -5404,6 +5427,7 @@ static RPCMethod createbitplusdvp()
             {"payment_script_pub_key", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "Exact BTP payment output scriptPubKey hex."},
             {"payment_amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "Exact BTP payment amount."},
             {"payment_output_index", RPCArg::Type::NUM, RPCArg::Optional::NO, "Exact BTP payment output index."},
+            {"asset_locking_script", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "Optional inner transfer carrier locking script."},
         },
         RPCResult{RPCResult::Type::OBJ, "", "", {
             {RPCResult::Type::STR_HEX, "members_root", "The verified whitelist members root."},
@@ -5433,8 +5457,9 @@ static RPCMethod createbitplusdvp()
                 .metadata_hash = ParseHashV(request.params[3], "metadata_hash"),
                 .member_hash = ParseHashV(request.params[4], "member_hash"),
             };
-            const CScript transfer_script_pub_key{bitplus::assets::BuildAssetCommitmentScript(transfer)};
-            ValidateConstructedAssetScript(transfer_script_pub_key);
+            const AssetScriptWithLocking transfer_script{
+                BuildAssetScriptWithOptionalLockingScript(transfer, request.params[12], "asset_locking_script")
+            };
 
             const uint32_t asset_output_index{ParseOutputIndex(request.params[5], "asset_output_index")};
             const uint32_t proof_index{ParseOutputIndex(request.params[6], "proof_index")};
@@ -5467,11 +5492,12 @@ static RPCMethod createbitplusdvp()
 
             UniValue result{UniValue::VOBJ};
             result.pushKV("members_root", computed_members_root.ToString());
-            result.pushKV("transfer", AssetCommitmentToJSON(transfer, transfer_script_pub_key));
+            result.pushKV("transfer", AssetCommitmentToJSON(transfer, transfer_script.script_pub_key));
             result.pushKV("proof", std::move(proof_obj));
             result.pushKV("settlement_leaf", ContractLeafToJSON(bitplus::contracts::BuildDvPSettlementLeaf(
                 ParseScriptHex(request.params[0], "authorization_script"),
                 transfer,
+                transfer_script.locking_script,
                 asset_output_index,
                 ParseScriptHex(request.params[9], "payment_script_pub_key"),
                 ParsePositiveBtpAmount(request.params[10], "payment_amount"),
@@ -5508,6 +5534,8 @@ static RPCMethod createbitpluspvp()
                 {"sibling", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "A Merkle sibling hash."},
             }},
             {"second_members_root", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "Expected second whitelist members root."},
+            {"first_asset_locking_script", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "Optional inner first transfer carrier locking script."},
+            {"second_asset_locking_script", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "Optional inner second transfer carrier locking script."},
         },
         RPCResult{RPCResult::Type::OBJ, "", "", {
             {RPCResult::Type::OBJ, "first_transfer", "First spendable transfer asset carrier output.", {
@@ -5548,8 +5576,9 @@ static RPCMethod createbitpluspvp()
                 .metadata_hash = ParseHashV(request.params[3], "first_metadata_hash"),
                 .member_hash = ParseHashV(request.params[4], "first_member_hash"),
             };
-            const CScript first_transfer_script_pub_key{bitplus::assets::BuildAssetCommitmentScript(first_transfer)};
-            ValidateConstructedAssetScript(first_transfer_script_pub_key);
+            const AssetScriptWithLocking first_transfer_script{
+                BuildAssetScriptWithOptionalLockingScript(first_transfer, request.params[17], "first_asset_locking_script")
+            };
 
             std::vector<uint256> first_path;
             for (const UniValue& sibling : request.params[7].get_array().getValues()) {
@@ -5577,8 +5606,9 @@ static RPCMethod createbitpluspvp()
                 .metadata_hash = ParseHashV(request.params[11], "second_metadata_hash"),
                 .member_hash = ParseHashV(request.params[12], "second_member_hash"),
             };
-            const CScript second_transfer_script_pub_key{bitplus::assets::BuildAssetCommitmentScript(second_transfer)};
-            ValidateConstructedAssetScript(second_transfer_script_pub_key);
+            const AssetScriptWithLocking second_transfer_script{
+                BuildAssetScriptWithOptionalLockingScript(second_transfer, request.params[18], "second_asset_locking_script")
+            };
 
             std::vector<uint256> second_path;
             for (const UniValue& sibling : request.params[15].get_array().getValues()) {
@@ -5612,15 +5642,17 @@ static RPCMethod createbitpluspvp()
             second_proof_obj.pushKV("commitment_hash", bitplus::assets::HashAssetWhitelistProofCommitment(second_proof).ToString());
 
             UniValue result{UniValue::VOBJ};
-            result.pushKV("first_transfer", AssetCommitmentToJSON(first_transfer, first_transfer_script_pub_key));
+            result.pushKV("first_transfer", AssetCommitmentToJSON(first_transfer, first_transfer_script.script_pub_key));
             result.pushKV("first_proof", std::move(first_proof_obj));
-            result.pushKV("second_transfer", AssetCommitmentToJSON(second_transfer, second_transfer_script_pub_key));
+            result.pushKV("second_transfer", AssetCommitmentToJSON(second_transfer, second_transfer_script.script_pub_key));
             result.pushKV("second_proof", std::move(second_proof_obj));
             result.pushKV("settlement_leaf", ContractLeafToJSON(bitplus::contracts::BuildPvPSettlementLeaf(
                 ParseScriptHex(request.params[0], "authorization_script"),
                 first_transfer,
+                first_transfer_script.locking_script,
                 first_proof.asset_output_index,
                 second_transfer,
+                second_transfer_script.locking_script,
                 second_proof.asset_output_index)));
             return result;
         },
@@ -5960,6 +5992,7 @@ static RPCMethod createbitplusdvpleaf()
             {"payment_script_pub_key", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "Exact BTP payment output scriptPubKey hex."},
             {"payment_amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "Exact BTP payment amount."},
             {"payment_output_index", RPCArg::Type::NUM, RPCArg::Optional::NO, "Exact BTP payment output index."},
+            {"asset_locking_script", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "Optional inner transfer carrier locking script."},
         },
         RPCResult{RPCResult::Type::OBJ, "", "", {
             {RPCResult::Type::STR_HEX, "script", "The DvP settlement leaf script."},
@@ -5967,9 +6000,16 @@ static RPCMethod createbitplusdvpleaf()
         }},
         RPCExamples{HelpExampleCli("createbitplusdvpleaf", "\"auth_script\" \"asset_id\" 100 \"metadata_hash\" \"member_hash\" 0 \"payment_script_pub_key\" 1.0 1")},
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue {
+            const bitplus::assets::AssetCommitment transfer{
+                ParseTransferCommitment(request.params[1], request.params[2], request.params[3], request.params[4])
+            };
+            const AssetScriptWithLocking transfer_script{
+                BuildAssetScriptWithOptionalLockingScript(transfer, request.params[9], "asset_locking_script")
+            };
             return ContractLeafToJSON(bitplus::contracts::BuildDvPSettlementLeaf(
                 ParseScriptHex(request.params[0], "authorization_script"),
-                ParseTransferCommitment(request.params[1], request.params[2], request.params[3], request.params[4]),
+                transfer,
+                transfer_script.locking_script,
                 ParseOutputIndex(request.params[5], "asset_output_index"),
                 ParseScriptHex(request.params[6], "payment_script_pub_key"),
                 ParsePositiveBtpAmount(request.params[7], "payment_amount"),
@@ -5995,6 +6035,8 @@ static RPCMethod createbitpluspvpleaf()
             {"second_metadata_hash", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "Second transfer metadata commitment hash."},
             {"second_member_hash", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "Second transfer member hash."},
             {"second_asset_output_index", RPCArg::Type::NUM, RPCArg::Optional::NO, "Exact second asset transfer output index."},
+            {"first_asset_locking_script", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "Optional inner first transfer carrier locking script."},
+            {"second_asset_locking_script", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "Optional inner second transfer carrier locking script."},
         },
         RPCResult{RPCResult::Type::OBJ, "", "", {
             {RPCResult::Type::STR_HEX, "script", "The PvP settlement leaf script."},
@@ -6002,11 +6044,25 @@ static RPCMethod createbitpluspvpleaf()
         }},
         RPCExamples{HelpExampleCli("createbitpluspvpleaf", "\"auth_script\" \"asset_id_a\" 100 \"metadata_hash_a\" \"member_hash_a\" 0 \"asset_id_b\" 200 \"metadata_hash_b\" \"member_hash_b\" 1")},
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue {
+            const bitplus::assets::AssetCommitment first_transfer{
+                ParseTransferCommitment(request.params[1], request.params[2], request.params[3], request.params[4])
+            };
+            const bitplus::assets::AssetCommitment second_transfer{
+                ParseTransferCommitment(request.params[6], request.params[7], request.params[8], request.params[9])
+            };
+            const AssetScriptWithLocking first_transfer_script{
+                BuildAssetScriptWithOptionalLockingScript(first_transfer, request.params[11], "first_asset_locking_script")
+            };
+            const AssetScriptWithLocking second_transfer_script{
+                BuildAssetScriptWithOptionalLockingScript(second_transfer, request.params[12], "second_asset_locking_script")
+            };
             return ContractLeafToJSON(bitplus::contracts::BuildPvPSettlementLeaf(
                 ParseScriptHex(request.params[0], "authorization_script"),
-                ParseTransferCommitment(request.params[1], request.params[2], request.params[3], request.params[4]),
+                first_transfer,
+                first_transfer_script.locking_script,
                 ParseOutputIndex(request.params[5], "first_asset_output_index"),
-                ParseTransferCommitment(request.params[6], request.params[7], request.params[8], request.params[9]),
+                second_transfer,
+                second_transfer_script.locking_script,
                 ParseOutputIndex(request.params[10], "second_asset_output_index")));
         },
     };

@@ -137,10 +137,15 @@ uint256 ComputeAssetId(const uint256& metadata_hash, const COutPoint& issuance_a
     return (HashWriter{} << metadata_hash << issuance_anchor).GetSHA256();
 }
 
-CScript BuildAssetCommitmentScript(const AssetCommitment& commitment)
+CScript BuildDefaultAssetLockingScript(const AssetCommitment& commitment)
 {
     const std::vector<unsigned char> member_hash{commitment.member_hash.begin(), commitment.member_hash.end()};
-    return BuildAssetCommitmentScript(commitment, CScript{} << OP_SHA256 << member_hash << OP_EQUAL);
+    return CScript{} << OP_SHA256 << member_hash << OP_EQUAL;
+}
+
+CScript BuildAssetCommitmentScript(const AssetCommitment& commitment)
+{
+    return BuildAssetCommitmentScript(commitment, BuildDefaultAssetLockingScript(commitment));
 }
 
 CScript BuildAssetCommitmentScript(const AssetCommitment& commitment, const CScript& locking_script)

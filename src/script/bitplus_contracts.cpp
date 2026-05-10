@@ -72,7 +72,26 @@ CScript BuildDvPSettlementLeaf(
     CAmount payment_amount,
     uint32_t payment_output_index)
 {
-    const CScript asset_script_pub_key{bitplus::assets::BuildAssetCommitmentScript(asset_transfer)};
+    return BuildDvPSettlementLeaf(
+        authorization_script,
+        asset_transfer,
+        bitplus::assets::BuildDefaultAssetLockingScript(asset_transfer),
+        asset_output_index,
+        payment_script_pub_key,
+        payment_amount,
+        payment_output_index);
+}
+
+CScript BuildDvPSettlementLeaf(
+    const CScript& authorization_script,
+    const bitplus::assets::AssetCommitment& asset_transfer,
+    const CScript& asset_locking_script,
+    uint32_t asset_output_index,
+    const CScript& payment_script_pub_key,
+    CAmount payment_amount,
+    uint32_t payment_output_index)
+{
+    const CScript asset_script_pub_key{bitplus::assets::BuildAssetCommitmentScript(asset_transfer, asset_locking_script)};
     return BuildScript(
         authorization_script,
         OP_VERIFY,
@@ -88,8 +107,27 @@ CScript BuildPvPSettlementLeaf(
     const bitplus::assets::AssetCommitment& second_asset_transfer,
     uint32_t second_asset_output_index)
 {
-    const CScript first_asset_script_pub_key{bitplus::assets::BuildAssetCommitmentScript(first_asset_transfer)};
-    const CScript second_asset_script_pub_key{bitplus::assets::BuildAssetCommitmentScript(second_asset_transfer)};
+    return BuildPvPSettlementLeaf(
+        authorization_script,
+        first_asset_transfer,
+        bitplus::assets::BuildDefaultAssetLockingScript(first_asset_transfer),
+        first_asset_output_index,
+        second_asset_transfer,
+        bitplus::assets::BuildDefaultAssetLockingScript(second_asset_transfer),
+        second_asset_output_index);
+}
+
+CScript BuildPvPSettlementLeaf(
+    const CScript& authorization_script,
+    const bitplus::assets::AssetCommitment& first_asset_transfer,
+    const CScript& first_asset_locking_script,
+    uint32_t first_asset_output_index,
+    const bitplus::assets::AssetCommitment& second_asset_transfer,
+    const CScript& second_asset_locking_script,
+    uint32_t second_asset_output_index)
+{
+    const CScript first_asset_script_pub_key{bitplus::assets::BuildAssetCommitmentScript(first_asset_transfer, first_asset_locking_script)};
+    const CScript second_asset_script_pub_key{bitplus::assets::BuildAssetCommitmentScript(second_asset_transfer, second_asset_locking_script)};
     return BuildScript(
         authorization_script,
         OP_VERIFY,

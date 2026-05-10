@@ -213,7 +213,9 @@ This gives institutions two clear paths:
 - Delayed withdrawal to a precommitted destination output.
 
 The authorization script can be a Taproot threshold script, a single key, or a
-future policy fragment. The covenant keeps the value bound to the intended
+future policy fragment. It must consume its own witness data and leave exactly
+one truthy stack item for `OP_VERIFY`, with no extra stack items left over for
+the final cleanstack check. The covenant keeps the value bound to the intended
 output, and the delay gives recovery systems time to react before withdrawal.
 
 ## HTLC Templates
@@ -623,11 +625,14 @@ conservation when institutional rules are active.
 
 `createbitplusdvp` builds a complete delivery-versus-payment construction
 package: transfer carrier, matching whitelist proof, and DvP settlement leaf. It
-verifies the whitelist proof root before producing the leaf.
+verifies the whitelist proof root before producing the leaf. Callers may provide
+an optional asset locking script so the asset leg settles directly into a
+specific custody or control script rather than the default member hashlock.
 
 `createbitpluspvp` builds a complete payment-versus-payment construction
 package: two transfer carriers, their matching whitelist proofs, and a PvP
-settlement leaf. Each leg can use its own whitelist root.
+settlement leaf. Each leg can use its own whitelist root and optional asset
+locking script.
 
 `createbitplusvault`, `createbitplushtlc`, `createbitpluscollateral`, and
 `createbitplusrefundpaths` return paired Tapscript leaves for the common
@@ -638,7 +643,12 @@ plus relative refund.
 The contract leaf helpers return raw Tapscript leaf hex plus a `script_hash`.
 They expect hex-encoded authorization scripts and output scriptPubKeys, exact
 BTP amounts, and exact output indexes. DvP/PvP helpers build `TRANSFER` asset
-legs and bind them to zero-BTP asset carrier outputs.
+legs and bind them to zero-BTP asset carrier outputs. If no asset locking script
+is supplied, the helpers use the default `OP_SHA256 <member_hash> OP_EQUAL`
+asset lock. DvP/PvP leaf checks only prove that the exact committed outputs are
+present; native asset conservation, metadata, and whitelist rules are enforced
+by the separate Bitplus asset consensus checks when institutional contracts are
+active.
 
 ## Asset Metadata Commitment Format
 
@@ -759,8 +769,9 @@ OP_TRUE
 ```
 
 The asset leg is a spendable asset carrier output where the payload type is
-normally `TRANSFER`. The payment leg is a normal BTP output to the seller or
-settlement account.
+normally `TRANSFER`. Its inner locking script can be the default member hashlock
+or a caller-supplied custody/control script. The payment leg is a normal BTP
+output to the seller or settlement account.
 
 This template makes the spend valid only if:
 
@@ -788,7 +799,8 @@ OP_TRUE
 ```
 
 Both legs are spendable asset carrier outputs, normally with payload type
-`TRANSFER`.
+`TRANSFER`. Each leg can use the default member hashlock or a caller-supplied
+custody/control script.
 
 This template makes the spend valid only if:
 

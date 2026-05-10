@@ -124,6 +124,7 @@ std::optional<AssetCommitment> DecodeAssetCommitment(std::span<const unsigned ch
 uint256 HashAssetCommitment(const AssetCommitment& commitment);
 uint256 ComputeAssetId(const uint256& metadata_hash, const COutPoint& issuance_anchor);
 
+CScript BuildDefaultAssetLockingScript(const AssetCommitment& commitment);
 CScript BuildAssetCommitmentScript(const AssetCommitment& commitment);
 CScript BuildAssetCommitmentScript(const AssetCommitment& commitment, const CScript& locking_script);
 std::optional<AssetCommitment> DecodeAssetCommitmentScript(const CScript& script);

@@ -1873,6 +1873,21 @@ BOOST_AUTO_TEST_CASE(script_dvp_settlement_template)
     stack.clear();
     BOOST_CHECK(!EvalScript(stack, dvp_leaf, SCRIPT_VERIFY_INSTITUTIONAL_CONTRACTS, MutableTransactionSignatureChecker{&tx, 0, 0, MissingDataBehavior::ASSERT_FAIL}, SigVersion::TAPSCRIPT, &err));
     BOOST_CHECK_EQUAL(err, SCRIPT_ERR_CHECKOUTPUTVERIFY);
+
+    const CScript custom_asset_lock{CScript{} << OP_2};
+    const CScript custom_asset_script{bitplus::assets::BuildAssetCommitmentScript(asset_transfer, custom_asset_lock)};
+    tx.vout[0].nValue = 0;
+    tx.vout[0].scriptPubKey = custom_asset_script;
+    tx.vout[1].nValue = payment_amount;
+    stack.clear();
+    const CScript custom_dvp_leaf{bitplus::contracts::BuildDvPSettlementLeaf(auth_script, asset_transfer, custom_asset_lock, 0, payment_script, payment_amount, 1)};
+    BOOST_CHECK(EvalScript(stack, custom_dvp_leaf, SCRIPT_VERIFY_INSTITUTIONAL_CONTRACTS, MutableTransactionSignatureChecker{&tx, 0, 0, MissingDataBehavior::ASSERT_FAIL}, SigVersion::TAPSCRIPT, &err));
+    BOOST_CHECK_EQUAL(err, SCRIPT_ERR_OK);
+
+    tx.vout[0].scriptPubKey = asset_script;
+    stack.clear();
+    BOOST_CHECK(!EvalScript(stack, custom_dvp_leaf, SCRIPT_VERIFY_INSTITUTIONAL_CONTRACTS, MutableTransactionSignatureChecker{&tx, 0, 0, MissingDataBehavior::ASSERT_FAIL}, SigVersion::TAPSCRIPT, &err));
+    BOOST_CHECK_EQUAL(err, SCRIPT_ERR_CHECKOUTPUTVERIFY);
 }
 
 BOOST_AUTO_TEST_CASE(script_pvp_settlement_template)
@@ -1923,6 +1938,27 @@ BOOST_AUTO_TEST_CASE(script_pvp_settlement_template)
     tx.vout[1].scriptPubKey = bitplus::assets::BuildAssetCommitmentScript(second_asset_transfer);
     stack.clear();
     BOOST_CHECK(!EvalScript(stack, pvp_leaf, SCRIPT_VERIFY_INSTITUTIONAL_CONTRACTS, MutableTransactionSignatureChecker{&tx, 0, 0, MissingDataBehavior::ASSERT_FAIL}, SigVersion::TAPSCRIPT, &err));
+    BOOST_CHECK_EQUAL(err, SCRIPT_ERR_CHECKOUTPUTVERIFY);
+
+    const CScript first_custom_lock{CScript{} << OP_2};
+    const CScript second_custom_lock{CScript{} << OP_3};
+    tx.vout[0].scriptPubKey = bitplus::assets::BuildAssetCommitmentScript(first_asset_transfer, first_custom_lock);
+    tx.vout[1].scriptPubKey = bitplus::assets::BuildAssetCommitmentScript(second_asset_transfer, second_custom_lock);
+    stack.clear();
+    const CScript custom_pvp_leaf{bitplus::contracts::BuildPvPSettlementLeaf(
+        auth_script,
+        first_asset_transfer,
+        first_custom_lock,
+        0,
+        second_asset_transfer,
+        second_custom_lock,
+        1)};
+    BOOST_CHECK(EvalScript(stack, custom_pvp_leaf, SCRIPT_VERIFY_INSTITUTIONAL_CONTRACTS, MutableTransactionSignatureChecker{&tx, 0, 0, MissingDataBehavior::ASSERT_FAIL}, SigVersion::TAPSCRIPT, &err));
+    BOOST_CHECK_EQUAL(err, SCRIPT_ERR_OK);
+
+    tx.vout[1].scriptPubKey = bitplus::assets::BuildAssetCommitmentScript(second_asset_transfer);
+    stack.clear();
+    BOOST_CHECK(!EvalScript(stack, custom_pvp_leaf, SCRIPT_VERIFY_INSTITUTIONAL_CONTRACTS, MutableTransactionSignatureChecker{&tx, 0, 0, MissingDataBehavior::ASSERT_FAIL}, SigVersion::TAPSCRIPT, &err));
     BOOST_CHECK_EQUAL(err, SCRIPT_ERR_CHECKOUTPUTVERIFY);
 }
 

@@ -40,6 +40,8 @@ VAULT_DELAY = 1
 COLLATERAL_RELEASE_AMOUNT = 600_000
 COLLATERAL_RETURN_AMOUNT = 500_000
 COLLATERAL_DELAY = 1
+HTLC_CLAIM_AMOUNT = 650_000
+HTLC_REFUND_AMOUNT = 550_000
 REFUND_ABSOLUTE_AMOUNT = 400_000
 REFUND_RELATIVE_AMOUNT = 300_000
 REFUND_RELATIVE_DELAY = 1
@@ -49,6 +51,9 @@ HASH_A = "11" * 32
 HASH_B = "22" * 32
 SECRET = b"bitplus settlement member"
 MEMBER_HASH = hashlib.sha256(SECRET).digest()[::-1].hex()
+HTLC_SECRET = b"bitplus htlc preimage"
+HTLC_BAD_SECRET = b"bitplus wrong htlc preimage"
+HTLC_SECRET_HASH = hashlib.sha256(HTLC_SECRET).digest()[::-1].hex()
 ZERO_BTP = 0
 TRANSFER_VOUT = 4
 
@@ -82,7 +87,7 @@ class BitplusCovenantsTest(BitplusTestFramework):
             sequence=0xfffffffe,
         )
 
-    def build_taproot_script_spend(self, funding_txid, funding_vout, tap, *, leaf_name, amount, sequence):
+    def build_taproot_script_spend(self, funding_txid, funding_vout, tap, *, leaf_name, amount, sequence, witness_items=None):
         tx = CTransaction()
         tx.version = 2
         tx.vin = [CTxIn(COutPoint(int(funding_txid, 16), funding_vout), nSequence=sequence)]
@@ -90,13 +95,14 @@ class BitplusCovenantsTest(BitplusTestFramework):
             CTxOut(amount, CScript([OP_TRUE])),
             CTxOut(0, CScript([OP_RETURN, b"bitplus fixed-template execution padding"])),
         ]
-        self.attach_taproot_script_witness(tx, 0, tap, leaf_name)
+        self.attach_taproot_script_witness(tx, 0, tap, leaf_name, witness_items=witness_items)
         return tx
 
-    def attach_taproot_script_witness(self, tx, input_index, tap, leaf_name):
+    def attach_taproot_script_witness(self, tx, input_index, tap, leaf_name, witness_items=None):
         leaf = tap.leaves[leaf_name]
         tx.wit.vtxinwit = [CTxInWitness() for _ in tx.vin]
         tx.wit.vtxinwit[input_index].scriptWitness.stack = [
+            *(witness_items or []),
             bytes(leaf.script),
             control_block(tap, leaf_name),
         ]
@@ -373,6 +379,82 @@ class BitplusCovenantsTest(BitplusTestFramework):
             sequence=VAULT_DELAY,
         )
         self.assert_accept_and_mine(mature_delayed)
+
+        self.log.info("Fund Taproot HTLC template")
+        htlc_expiry = node.getblockcount() + 1
+        htlc = node.createbitplushtlc(
+            "51",
+            HTLC_SECRET_HASH,
+            CScript([OP_TRUE]).hex(),
+            "0.00650000",
+            0,
+            htlc_expiry,
+            CScript([OP_TRUE]).hex(),
+            "0.00550000",
+            0,
+        )
+        htlc_internal_key = compute_xonly_pubkey(hash256(b"bitplus htlc internal key"))[0]
+        htlc_tap = taproot_construct(htlc_internal_key, [
+            ("claim", CScript(bytes.fromhex(htlc["claim_leaf"]["script"])), LEAF_VERSION_TAPSCRIPT),
+            ("refund", CScript(bytes.fromhex(htlc["refund_leaf"]["script"])), LEAF_VERSION_TAPSCRIPT),
+        ])
+
+        self.log.info("Reject HTLC claim with wrong preimage")
+        bad_claim_funding = self.fund_taproot(wallet, htlc_tap)
+        bad_claim = self.build_taproot_script_spend(
+            bad_claim_funding["txid"],
+            bad_claim_funding["sent_vout"],
+            htlc_tap,
+            leaf_name="claim",
+            amount=HTLC_CLAIM_AMOUNT,
+            sequence=0xfffffffe,
+            witness_items=[HTLC_BAD_SECRET],
+        )
+        self.assert_script_rejects(
+            bad_claim,
+            "mempool-script-verify-flag-failed (Script failed an OP_EQUALVERIFY operation)",
+            "block-script-verify-flag-failed (Script failed an OP_EQUALVERIFY operation)",
+        )
+
+        self.log.info("Accept and mine HTLC claim with preimage")
+        good_claim = self.build_taproot_script_spend(
+            bad_claim_funding["txid"],
+            bad_claim_funding["sent_vout"],
+            htlc_tap,
+            leaf_name="claim",
+            amount=HTLC_CLAIM_AMOUNT,
+            sequence=0xfffffffe,
+            witness_items=[HTLC_SECRET],
+        )
+        self.assert_accept_and_mine(good_claim)
+
+        self.log.info("Reject HTLC refund before CLTV expiry")
+        refund_funding = self.fund_taproot(wallet, htlc_tap)
+        premature_htlc_refund = self.build_taproot_script_spend(
+            refund_funding["txid"],
+            refund_funding["sent_vout"],
+            htlc_tap,
+            leaf_name="refund",
+            amount=HTLC_REFUND_AMOUNT,
+            sequence=0xfffffffe,
+        )
+        self.assert_script_rejects(
+            premature_htlc_refund,
+            "mempool-script-verify-flag-failed (Locktime requirement not satisfied)",
+            "block-script-verify-flag-failed (Locktime requirement not satisfied)",
+        )
+
+        self.log.info("Accept and mine HTLC refund at CLTV expiry")
+        mature_htlc_refund = self.build_taproot_script_spend(
+            refund_funding["txid"],
+            refund_funding["sent_vout"],
+            htlc_tap,
+            leaf_name="refund",
+            amount=HTLC_REFUND_AMOUNT,
+            sequence=0xfffffffe,
+        )
+        mature_htlc_refund.nLockTime = htlc_expiry
+        self.assert_accept_and_mine(mature_htlc_refund)
 
         self.log.info("Fund Taproot collateral template")
         collateral = node.createbitpluscollateral(

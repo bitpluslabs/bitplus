@@ -8,6 +8,7 @@
 #include <consensus/amount.h>
 #include <script/bitplus_assets.h>
 #include <script/script.h>
+#include <uint256.h>
 
 #include <cstdint>
 
@@ -32,6 +33,24 @@ CScript BuildVaultRecoveryLeaf(const CScript& authorization_script, const CScrip
  * to create the exact destination output.
  */
 CScript BuildVaultDelayedSpendLeaf(const CScript& authorization_script, int64_t relative_delay, const CScript& destination_script_pub_key, CAmount amount, uint32_t output_index);
+
+/**
+ * Build an HTLC claim leaf.
+ *
+ * The authorization script must leave a truthy stack item. On success, the leaf
+ * requires a SHA256 preimage and sends the locked value to the exact claim
+ * output.
+ */
+CScript BuildHtlcClaimLeaf(const CScript& authorization_script, const uint256& secret_hash, const CScript& claim_script_pub_key, CAmount amount, uint32_t output_index);
+
+/**
+ * Build an HTLC refund leaf.
+ *
+ * The authorization script must leave a truthy stack item. On success, the leaf
+ * requires nLockTime to satisfy the absolute expiry and sends the locked value
+ * to the exact refund output.
+ */
+CScript BuildHtlcRefundLeaf(const CScript& authorization_script, int64_t absolute_expiry, const CScript& refund_script_pub_key, CAmount amount, uint32_t output_index);
 
 /**
  * Build a delivery-versus-payment settlement leaf.

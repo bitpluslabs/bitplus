@@ -50,6 +50,12 @@ bool IsKnownType(uint8_t type)
            type == static_cast<uint8_t>(AssetCommitmentType::BURN);
 }
 
+template <size_t N>
+bool StartsWithMagic(std::span<const unsigned char> payload, const std::array<unsigned char, N>& magic)
+{
+    return payload.size() >= magic.size() && std::equal(magic.begin(), magic.end(), payload.begin());
+}
+
 void AddToSummary(uint64_t& total, uint64_t amount, bool& overflow)
 {
     if (std::numeric_limits<uint64_t>::max() - total < amount) {
@@ -198,6 +204,36 @@ std::vector<AssetOutput> ExtractAssetOutputs(const CTransaction& tx)
         if (output.has_value()) outputs.push_back(*output);
     }
     return outputs;
+}
+
+std::optional<AssetValidationResult> FindFirstMalformedAssetCommitmentOutput(const CTransaction& tx)
+{
+    for (uint32_t i{0}; i < tx.vout.size(); ++i) {
+        const CScript& script{tx.vout[i].scriptPubKey};
+        CScript::const_iterator pc{script.begin()};
+        opcodetype opcode;
+        std::vector<unsigned char> data;
+
+        if (!script.GetOp(pc, opcode, data)) continue;
+        if (opcode == OP_RETURN) {
+            if (!script.GetOp(pc, opcode, data) || opcode > OP_PUSHDATA4) continue;
+            if (StartsWithMagic(data, ASSET_METADATA_MAGIC) && !DecodeAssetMetadataOutput(tx.vout[i], i).has_value()) {
+                return AssetValidationResult{.output_index = i, .valid = false, .reason = "asset-metadata-malformed"};
+            }
+            if (StartsWithMagic(data, ASSET_WHITELIST_MAGIC) && !DecodeAssetWhitelistOutput(tx.vout[i], i).has_value()) {
+                return AssetValidationResult{.output_index = i, .valid = false, .reason = "asset-whitelist-malformed"};
+            }
+            if (StartsWithMagic(data, ASSET_WHITELIST_PROOF_MAGIC) && !DecodeAssetWhitelistProofOutput(tx.vout[i], i).has_value()) {
+                return AssetValidationResult{.output_index = i, .valid = false, .reason = "asset-whitelist-proof-malformed"};
+            }
+            continue;
+        }
+
+        if (opcode <= OP_PUSHDATA4 && StartsWithMagic(data, ASSET_COMMITMENT_MAGIC) && !DecodeAssetOutput(tx.vout[i], i).has_value()) {
+            return AssetValidationResult{.output_index = i, .valid = false, .reason = "asset-commitment-malformed"};
+        }
+    }
+    return std::nullopt;
 }
 
 std::optional<std::vector<AssetOutput>> ExtractSpentAssetOutputs(const CTransaction& tx, const CCoinsViewCache& coins)

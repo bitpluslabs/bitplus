@@ -39,6 +39,31 @@ CScript BuildVaultDelayedSpendLeaf(const CScript& authorization_script, int64_t 
         OP_TRUE);
 }
 
+CScript BuildHtlcClaimLeaf(const CScript& authorization_script, const uint256& secret_hash, const CScript& claim_script_pub_key, CAmount amount, uint32_t output_index)
+{
+    const std::vector<unsigned char> secret_hash_vch{secret_hash.begin(), secret_hash.end()};
+    return BuildScript(
+        authorization_script,
+        OP_VERIFY,
+        OP_SHA256,
+        secret_hash_vch,
+        OP_EQUALVERIFY,
+        BuildCheckOutputVerifyScript(claim_script_pub_key, amount, output_index),
+        OP_TRUE);
+}
+
+CScript BuildHtlcRefundLeaf(const CScript& authorization_script, int64_t absolute_expiry, const CScript& refund_script_pub_key, CAmount amount, uint32_t output_index)
+{
+    return BuildScript(
+        authorization_script,
+        OP_VERIFY,
+        absolute_expiry,
+        OP_CHECKLOCKTIMEVERIFY,
+        OP_DROP,
+        BuildCheckOutputVerifyScript(refund_script_pub_key, amount, output_index),
+        OP_TRUE);
+}
+
 CScript BuildDvPSettlementLeaf(
     const CScript& authorization_script,
     const bitplus::assets::AssetCommitment& asset_transfer,

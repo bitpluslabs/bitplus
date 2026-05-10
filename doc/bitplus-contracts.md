@@ -48,16 +48,113 @@ dormant and does not enforce the new covenant rule.
 
 1. Covenants - started with `OP_CHECKOUTPUTVERIFY`
 2. Vault templates - started with script construction helpers
-3. Native asset commitment format - started with `BTPASSET` commitments
-4. Asset metadata commitments - started with `BTPMETA` commitments
-5. Whitelist rule commitments - started with `BTPWLST` commitments
-6. DvP templates - started with script construction helpers
-7. PvP templates - started with script construction helpers
-8. Collateral lock/release templates - started with script construction helpers
-9. Expiry/refund templates - started with script construction helpers
+3. HTLC templates - started with claim and refund script construction helpers
+4. Native asset commitment format - started with `BTPASSET` commitments
+5. Asset metadata commitments - started with `BTPMETA` commitments
+6. Whitelist rule commitments - started with `BTPWLST` commitments
+7. DvP templates - started with script construction helpers
+8. PvP templates - started with script construction helpers
+9. Collateral lock/release templates - started with script construction helpers
+10. Expiry/refund templates - started with script construction helpers
 
 Each consensus change must include tests, activation notes, and documentation of
 the difference from Bitcoin Core.
+
+## Production Hardening Checklist
+
+These items must be complete before any real-money institutional deployment:
+
+- [x] More adversarial tests and fuzz-style edge cases, including malformed RPC
+  parameters, stale cursors, missing cursor fields, invalid cursor outpoints,
+  inactive deployment checks, invalid asset commitments, conservation failures,
+  whitelist proof failures, HTLC failure paths, and covenant mismatch paths.
+- [x] RPC/API cleanup and consistency review for the Bitplus construction,
+  analysis, readiness, scan, and stats RPCs.
+- [x] Better error taxonomy and operator documentation.
+- [x] Reorg and load-style reconciliation tests, including active-chain
+  invalidation/reconsideration and paginated scans over larger asset UTXO sets.
+- [x] Consensus-safety and serialization-stability review.
+- [x] Asset index design review for large production asset sets.
+- [ ] External security review/audit before real funds.
+
+The external audit is a release gate, not an in-repo task. It must be performed
+by independent reviewers after the implementation and test suite stabilize.
+
+## Error Taxonomy
+
+Bitplus uses three broad error classes:
+
+- RPC parameter errors use `RPC_INVALID_PARAMETER` and indicate malformed API
+  input, unsupported enum values, missing cursor fields, null identifiers, or
+  locally invalid construction requests. Operators should fix the request before
+  retrying.
+- Analyzer issues appear inside Bitplus analysis/readiness `issues` arrays and
+  indicate a transaction or PSBT review problem, such as missing prevout context,
+  missing whitelist proof, unbalanced asset conservation, or inactive deployment.
+  Operators should treat these as signing or broadcast blockers unless a venue
+  policy explicitly allows the warning class involved.
+- Consensus/policy rejects appear in `testmempoolaccept`, block validation, or
+  readiness mempool fields. These are node-enforced rejects for active rules or
+  standardness policy. Operators should not assume a transaction can settle until
+  these rejects are gone on the intended network policy.
+
+Cursor-based reconciliation RPCs intentionally reject stale or incomplete cursors
+with explicit parameter errors. A cursor is bound to `height` and `bestblock` so
+pages from different active-chain snapshots cannot be silently mixed.
+Unknown filter or cursor object fields are rejected rather than ignored, so
+operator typos cannot silently widen or alter a reconciliation query.
+UTXO-derived reconciliation RPCs also verify that the active chain tip is still
+the same after the scan finishes. If a block connect, disconnect, or reorg races
+the scan, the RPC returns a retryable error instead of publishing a report from
+a moving snapshot.
+
+## Serialization Stability Review
+
+Consensus-facing Bitplus data must remain byte-stable. The current native asset
+format follows these rules:
+
+- Every commitment family has a fixed ASCII magic prefix: `BTPASSET`, `BTPMETA`,
+  `BTPWLST`, or `BTPWPROOF`.
+- Every commitment family carries an explicit version byte. The current version
+  is `1`; incompatible encoding changes must use a new version.
+- Integer fields are serialized in one fixed form: asset amounts are little-endian
+  64-bit values, whitelist flags are little-endian 32-bit values, and whitelist
+  proof indexes are little-endian 32-bit values.
+- Hashes commit to the encoded payload bytes or to explicit domain-separated
+  `HashWriter` records. Asset ids commit to the metadata hash and the issuing
+  input outpoint.
+- Operator report hashes use versioned domains such as
+  `BitplusAssetUtxoScanSummaryV1`. If a report schema changes in a way that
+  affects approvals or audit records, its domain or summary version must change.
+
+The consensus rule is intentionally narrow: nodes validate locally from the
+transaction, spent outputs, and active deployment state. Bitplus does not add
+account state, external databases, or arbitrary program execution to consensus.
+
+## Asset Index Design Review
+
+The current asset scan and stats RPCs intentionally walk the active UTXO set.
+That is simple and consensus-safe, and it remains useful as an audit and
+reconciliation path because the answer is derived directly from the node's
+current chainstate snapshot.
+
+Large production venues should add an optional non-consensus asset index before
+operating at scale. The index should:
+
+- Key live outputs by `asset_id`, member hash, metadata hash, and asset type.
+- Store outpoint, amount, commitment fields, creating height, block hash, and
+  spent/unspent state.
+- Update atomically with block connect and disconnect so reorg behavior matches
+  the active chain.
+- Expose the same filters and equivalent reconciliation/report hashes as the
+  current scan RPCs, so operator workflows do not depend on whether the backend
+  is UTXO scanning or indexed lookup.
+- Stay outside consensus. A node without the index must still validate every
+  block and transaction with the same rules.
+
+Until that index exists, `scanbitplusassetutxos`, `getbitplusassetstats`, and
+`getbitplusmemberassetstats` should be treated as correctness-first
+reconciliation tools, not low-latency query engines for very large ledgers.
 
 ## Covenant Primitive
 
@@ -110,6 +207,33 @@ This gives institutions two clear paths:
 The authorization script can be a Taproot threshold script, a single key, or a
 future policy fragment. The covenant keeps the value bound to the intended
 output, and the delay gives recovery systems time to react before withdrawal.
+
+## HTLC Templates
+
+HTLCs are built as paired Tapscript leaves. The claim path requires a SHA256
+preimage and an exact claim output:
+
+```text
+<authorization_script> OP_VERIFY
+OP_SHA256 <secret_hash> OP_EQUALVERIFY
+<claim_scriptPubKeyHash> <amount> <output_index> OP_CHECKOUTPUTVERIFY
+OP_TRUE
+```
+
+The refund path opens after an absolute CLTV expiry and still requires the exact
+refund output:
+
+```text
+<authorization_script> OP_VERIFY
+<absolute_expiry> OP_CHECKLOCKTIMEVERIFY OP_DROP
+<refund_scriptPubKeyHash> <amount> <output_index> OP_CHECKOUTPUTVERIFY
+OP_TRUE
+```
+
+This gives institutions a fixed hashlock/timelock primitive without adding a
+general-purpose VM. Functional tests cover wrong-preimage rejection, successful
+claim with the preimage, premature refund rejection, and successful refund at
+expiry.
 
 ## Native Asset Commitment Format
 
@@ -260,7 +384,16 @@ Raw transaction tooling exposes helper RPCs for constructing institutional
 commitment scripts without wallet support:
 
 - `createbitplusassetid`
+- `decodebitplusscript`
+- `analyzebitplustransaction`
+- `analyzebitpluspsbt`
 - `createbitplusscripttransaction`
+- `createbitpluspsbt`
+- `preparebitpluspsbt`
+- `checkbitplussettlement`
+- `scanbitplusassetutxos`
+- `getbitplusassetstats`
+- `getbitplusmemberassetstats`
 - `createbitplusassetmetadata`
 - `createbitplusassetwhitelist`
 - `createbitplusassetwhitelistroot`
@@ -272,11 +405,14 @@ commitment scripts without wallet support:
 - `createbitplusdvp`
 - `createbitpluspvp`
 - `createbitplusvault`
+- `createbitplushtlc`
 - `createbitpluscollateral`
 - `createbitplusrefundpaths`
 - `createbitpluscovleaf`
 - `createbitplusvaultrecoveryleaf`
 - `createbitplusvaultdelayedleaf`
+- `createbitplushtlcclaimleaf`
+- `createbitplushtlcrefundleaf`
 - `createbitplusdvpleaf`
 - `createbitpluspvpleaf`
 - `createbitpluscollateralreleaseleaf`
@@ -287,11 +423,175 @@ commitment scripts without wallet support:
 These return raw payloads, `scriptPubKey` hex, and commitment hashes that can be
 used with raw transaction construction flows.
 
+`decodebitplusscript` decodes one scriptPubKey before it is placed in a
+transaction. It reports whether the script is a recognized Bitplus commitment,
+which commitment type it carries, and whether the commitment is structurally
+valid for the supplied output amount and index. This gives operators and
+independent signing systems a direct pre-flight check before assembling or
+approving settlement transactions.
+
+`analyzebitplustransaction` performs the same style of pre-flight check over a
+whole raw transaction. It reports all recognized Bitplus outputs and flags
+same-transaction linkage issues such as missing metadata, missing whitelist
+rules, missing proofs, duplicate issuance, invalid issuance anchors, and orphan
+proofs. If the caller supplies the previous outputs being spent, it also checks
+asset conservation and reports per-asset spent, issued, transferred, and burned
+amounts. Without those previous outputs, mempool and block validation remain the
+authoritative conservation checks when institutional rules are active.
+Operators can also pass `lookup_spent_outputs=true`; in that mode the RPC fills
+missing prevouts from the node's UTXO set and mempool, reports
+`input_utxos_available` and `missing_input_utxos`, and marks the analysis
+invalid if any required prevout cannot be independently inspected. The analysis
+also includes `participant_movements`, which summarizes each member's per-asset
+spent amount, received live amount, burn attribution, and live balance delta.
+`bitplus_review_hash` commits to the transaction and the spent asset context
+used by the analyzer, while `bitplus_review_complete` tells operators whether
+the package included enough prevout data for a complete conservation review.
+
+`analyzebitpluspsbt` applies the same institutional pre-flight checks to the
+unsigned transaction inside a PSBT. When PSBT inputs include `witness_utxo` or
+`non_witness_utxo`, the RPC decodes spent Bitplus asset UTXOs and checks asset
+conservation before signatures are collected. It also reports
+`psbt_utxos_available` and `missing_psbt_utxos`, so an operator can reject a
+signing package that lacks the data needed for independent asset-conservation
+review. The same participant movement summary is available before signing when
+the PSBT carries the required input UTXO data, and the PSBT analysis exposes the
+same deterministic review hash so separate signers can compare the exact package
+they approved.
+
 `createbitplusscripttransaction` creates a raw unsigned transaction from normal
 inputs and an ordered list of exact `scriptPubKey` outputs. Each output may
 include an expected `index`; the RPC rejects the transaction if the expected
 index does not match the array position. This is useful for covenant
 transactions where `OP_CHECKOUTPUTVERIFY` commits to exact output indexes.
+
+`createbitpluspsbt` uses the same exact-output builder but returns a base64 PSBT
+and unsigned transaction id. This lets an operations desk assemble a deterministic
+settlement package, run `analyzebitpluspsbt`, circulate it for threshold signing,
+and only then finalize and broadcast.
+
+`preparebitpluspsbt` updates a PSBT with UTXO data available from the node,
+optionally using descriptors for script metadata enrichment, and returns the
+updated PSBT together with the post-update Bitplus analysis. It reports
+`missing_utxos_before`, `missing_utxos_after`, and `utxos_fully_available`, so
+operators can distinguish an unsigned-but-reviewable PSBT from one that is
+missing prevout data needed for independent asset-conservation checks.
+
+`checkbitplussettlement` is the operator readiness gate. It accepts either raw
+transaction hex or a base64 PSBT, runs the Bitplus analyzer, checks whether the
+institutional contracts deployment is active, reports final transaction
+weight/vsize when available, checks final-transaction input confirmation depth,
+and runs mempool test-accept for final transactions. The default
+`min_input_confirmations` is 6, matching a one-hour operational security policy
+for 10-minute blocks; operators can set it to 0 for dry runs or stricter/lower
+values for venue policy.
+The result includes `ready_to_broadcast`, `issues`, `warnings`, and the detailed
+`bitplus_analysis` object. `readiness_policy` records the versioned operator
+policy knobs used by the gate: input format, mempool-check requirement,
+`maxfeerate`, `min_input_confirmations`, and the fixed requirements that
+institutional contracts are active and Bitplus prevout review is complete. It
+also reports `chain_snapshot` with the active chain height and best block hash,
+plus `input_confirmations_available`, `input_confirmation_summary`,
+`input_confirmations`, and `inputs_below_min_confirmations`, so signers can see
+the exact chain state, aggregate confirmation counts, and per-input evidence
+used by the readiness decision. `bitplus_analysis_summary` gives a compact
+operator view over the detailed analyzer output: recognized output counts by
+commitment family, spent asset input count, conservation row counts, participant
+movement row count, analyzer issue count, and review validity/completeness.
+`readiness_issue_summary` groups blocking issues and warnings into operator
+categories such as finalization, activation, prevout context, confirmation,
+mempool, and fee policy, while separating analyzer issues from issues added by
+the readiness gate itself. `readiness_report_hash` commits to the compact
+operator report fields: chain snapshot, readiness policy, input confirmation
+summary, Bitplus analysis summary, issue summary, issues, warnings, ready flag,
+and the full `settlement_readiness_hash`.
+`settlement_readiness_hash` commits to the whole gate decision: transaction id,
+finalization state, chain snapshot, deployment state, confirmation policy and
+evidence, Bitplus review hash, `maxfeerate`, mempool-check setting/result,
+readiness result, issues, and warnings. It also lifts `bitplus_review_hash` and
+`recognized_outputs`, `conservation_checked`, `bitplus_review_complete`,
+`prevout_context_available`, `missing_prevout_indexes`, `asset_conservation`,
+and `participant_movements` to top level so signers and operators can compare
+the exact reviewed package and its asset effects without digging through nested
+analysis. Unsigned or incomplete PSBTs are intentionally not ready to broadcast;
+they remain useful review packages until finalized.
+
+`scanbitplusassetutxos` scans the confirmed UTXO set for live Bitplus asset
+outputs matching an `asset_id`. Optional filters can narrow results by asset
+`type`, `metadata_hash`, `member_hash`, and `min_confirmations`. It returns
+bounded results with outpoint, amount, confirmation, block, script, and decoded
+commitment fields.
+If the result is truncated, `complete` is false and `next_cursor` can be passed
+back as the fourth argument to continue from the last returned outpoint. The
+cursor includes `cursor_version: 1` and is bound to the returned `bestblock`,
+`height`, `asset_id`, and `filters_hash`; the node rejects it if the active
+chain tip changed, if the cursor version is unsupported, or if the caller tries
+to reuse it with a different asset id or filter set. This prevents operators
+from accidentally reconciling pages from different chain snapshots, different
+scan queries, or incompatible cursor formats.
+`reconciliation_hash` commits to the active-chain snapshot, filters, completion
+flag, continuation cursor, and returned UTXO rows for the bounded result page.
+This lets two operators compare the exact scan result they reviewed.
+`scan_summary` mirrors the page-level review fields such as filters, optional
+cursor, chain snapshot, `max_results`, cursor use, completion status, match
+count, and `reconciliation_hash`; `scan_summary_hash` commits to that compact
+page summary for approvals that do not need every returned UTXO row. The summary
+includes `summary_version` so operators can pin approval workflows to a stable
+schema, and `filters_hash` so they can compare the applied filters directly.
+`chain_snapshot` is also returned as a first-class object with `height` and
+`bestblock`, matching `checkbitplussettlement`; `chain_snapshot_hash` commits to
+that object.
+This is a lightweight reconciliation tool; a persistent asset index can be added
+later for large production operators that need low-latency queries over very
+large UTXO sets.
+
+`getbitplusassetstats` uses the same confirmed UTXO scan and optional filters,
+but returns aggregate reconciliation totals instead of individual outpoints. It
+reports live matching UTXO count, total asset units, and count/amount breakdowns
+by asset type, metadata hash, and member hash. `min_confirmations` lets
+operators reconcile only balances that have reached venue-required security
+depth, such as six confirmations for one-hour Bitcoin-style finality. Matching
+stats include `min_confirmations_observed` and `max_confirmations_observed`, and
+those values are part of the reconciliation hash, so the reviewed balance report
+commits to the confirmation range behind it. It also reports
+`issued_amount`, `held_amount`, and `burned_amount` so operators can distinguish
+raw live carrier totals from the transfer units currently held by members.
+`holder_count` and `by_holder_member_hash` are transfer-only views for custody
+and participant reconciliation; issuance and burn carriers are excluded from
+those holder totals. `outstanding_amount`, `supply_underflow`, and
+`holder_supply_balanced` compare the lifecycle view (`issued_amount` minus
+`burned_amount`) with live holder balances. `holder_supply_delta` is the signed
+held-minus-outstanding amount: zero means balanced, negative means holder
+balances are short, and positive means holders exceed lifecycle supply. These
+are most meaningful on an unfiltered asset view; type-specific lifecycle filters
+can intentionally show an unbalanced partial view. `reconciliation_hash` commits
+to the active-chain snapshot, applied filters, aggregate totals, and deterministic
+breakdowns so two operators can compare the exact same reconciliation result.
+`reconciliation_summary` mirrors the applied filters, key top-level totals,
+chain snapshot, confirmation range, and `reconciliation_hash` in a compact
+operator-facing object for approvals and audit records.
+`reconciliation_summary_hash` commits to that compact summary alone, while
+`reconciliation_hash` commits to the full breakdown. The summary includes
+`summary_version` so later summary changes can be introduced explicitly, plus
+`filters_hash` for direct comparison of the filtered view and
+`chain_snapshot_hash` for direct comparison of the active-chain snapshot.
+
+`getbitplusmemberassetstats` summarizes confirmed live asset UTXOs for one
+member hash, grouped by `asset_id`. Optional filters can restrict the view by
+`asset_id`, asset `type`, `metadata_hash`, or `min_confirmations`. This gives a custody desk or
+settlement venue a direct participant-level reconciliation view across all
+assets without first knowing every asset id the member currently holds. Like the
+asset-level stats, it separates `held_amount` from issuance and burn carrier
+amounts to avoid double-counting lifecycle commitments as member balances.
+`holder_asset_count` and each asset's `is_holder` flag are transfer-only holder
+signals, so lifecycle-only matches do not imply custody balance. The member view
+also returns a `reconciliation_hash` over the chain snapshot, member hash,
+filters, totals, confirmation ranges, and per-asset breakdowns. Its
+`reconciliation_summary` gives the same compact approval view, including
+filters, for participant reconciliation, and `reconciliation_summary_hash` lets
+operators compare that compact view directly. The same `summary_version` field
+is present for participant reports, along with `filters_hash`.
+Participant summaries also include `chain_snapshot_hash`.
 
 `createbitplusassetwhitelistroot` computes the whitelist `members_root` from an
 ordered list of member hashes. If `proof_index` is provided, it also returns the
@@ -318,10 +618,11 @@ verifies the whitelist proof root before producing the leaf.
 package: two transfer carriers, their matching whitelist proofs, and a PvP
 settlement leaf. Each leg can use its own whitelist root.
 
-`createbitplusvault`, `createbitpluscollateral`, and `createbitplusrefundpaths`
-return paired Tapscript leaves for the common two-path workflows: immediate
-vault recovery plus delayed spend, collateral release plus delayed return, and
-absolute plus relative refund.
+`createbitplusvault`, `createbitplushtlc`, `createbitpluscollateral`, and
+`createbitplusrefundpaths` return paired Tapscript leaves for the common
+two-path workflows: immediate vault recovery plus delayed spend, HTLC claim plus
+absolute-expiry refund, collateral release plus delayed return, and absolute
+plus relative refund.
 
 The contract leaf helpers return raw Tapscript leaf hex plus a `script_hash`.
 They expect hex-encoded authorization scripts and output scriptPubKeys, exact

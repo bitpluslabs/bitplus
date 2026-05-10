@@ -130,6 +130,7 @@ std::optional<AssetCommitment> DecodeAssetCommitmentScript(const CScript& script
 std::optional<CScript> DecodeAssetCommitmentLockingScript(const CScript& script);
 std::optional<AssetOutput> DecodeAssetOutput(const CTxOut& txout, uint32_t output_index);
 std::vector<AssetOutput> ExtractAssetOutputs(const CTransaction& tx);
+std::optional<AssetValidationResult> FindFirstMalformedAssetCommitmentOutput(const CTransaction& tx);
 std::optional<std::vector<AssetOutput>> ExtractSpentAssetOutputs(const CTransaction& tx, const CCoinsViewCache& coins);
 AssetBalanceSummary SummarizeAssetOutputs(std::span<const AssetOutput> outputs, const uint256& asset_id);
 AssetValidationResult ValidateAssetOutput(const AssetOutput& output);

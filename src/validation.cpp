@@ -126,6 +126,17 @@ struct InstitutionalAssetCheckFailure {
 
 static std::optional<InstitutionalAssetCheckFailure> CheckInstitutionalAssetRules(const CTransaction& tx, const CCoinsViewCache& view)
 {
+    const std::optional<bitplus::assets::AssetValidationResult> malformed_commitment{
+        bitplus::assets::FindFirstMalformedAssetCommitmentOutput(tx)
+    };
+    if (malformed_commitment.has_value()) {
+        return InstitutionalAssetCheckFailure{
+            .reason = malformed_commitment->reason,
+            .debug = strprintf("malformed asset commitment output %u in transaction %s",
+                               malformed_commitment->output_index, tx.GetHash().ToString()),
+        };
+    }
+
     const std::vector<bitplus::assets::AssetOutput> created_asset_outputs{
         bitplus::assets::ExtractAssetOutputs(tx)
     };

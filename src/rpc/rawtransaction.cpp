@@ -4036,6 +4036,8 @@ static RPCMethod scanbitplusassetutxos()
             }},
         },
         RPCResult{RPCResult::Type::OBJ, "", "", {
+            {RPCResult::Type::STR, "report_type", "Report type: asset_utxo_scan."},
+            {RPCResult::Type::NUM, "report_version", "Report schema version."},
             {RPCResult::Type::STR_HEX, "asset_id", "The requested asset id."},
             {RPCResult::Type::OBJ, "filters", "Applied filters.", {
                 {RPCResult::Type::STR, "type", /*optional=*/true, "Filtered asset type."},
@@ -4223,6 +4225,8 @@ static RPCMethod scanbitplusassetutxos()
             ThrowIfActiveChainTipChangedDuringBitplusScan(chainman, *tip);
 
             UniValue result{UniValue::VOBJ};
+            result.pushKV("report_type", "asset_utxo_scan");
+            result.pushKV("report_version", 1);
             result.pushKV("asset_id", asset_id.ToString());
             result.pushKV("filters", filters_json);
             if (scan_cursor.has_value()) result.pushKV("cursor", BitplusAssetScanCursorToJSON(*tip, scan_cursor->asset_id, scan_cursor->filters_hash, scan_cursor->after));
@@ -4335,6 +4339,8 @@ static RPCMethod getbitplusassetstats()
             }},
         },
         RPCResult{RPCResult::Type::OBJ, "", "", {
+            {RPCResult::Type::STR, "report_type", "Report type: asset_stats."},
+            {RPCResult::Type::NUM, "report_version", "Report schema version."},
             {RPCResult::Type::STR_HEX, "asset_id", "The requested asset id."},
             {RPCResult::Type::OBJ, "filters", "Applied filters.", {
                 {RPCResult::Type::STR, "type", /*optional=*/true, "Filtered asset type."},
@@ -4504,6 +4510,8 @@ static RPCMethod getbitplusassetstats()
             ThrowIfActiveChainTipChangedDuringBitplusScan(chainman, *tip);
 
             UniValue result{UniValue::VOBJ};
+            result.pushKV("report_type", "asset_stats");
+            result.pushKV("report_version", 1);
             result.pushKV("asset_id", asset_id.ToString());
             result.pushKV("filters", filters.ToJSON());
             result.pushKV("searched_txouts", searched);
@@ -4618,6 +4626,8 @@ static RPCMethod getbitplusmemberassetstats()
             }},
         },
         RPCResult{RPCResult::Type::OBJ, "", "", {
+            {RPCResult::Type::STR, "report_type", "Report type: member_asset_stats."},
+            {RPCResult::Type::NUM, "report_version", "Report schema version."},
             {RPCResult::Type::STR_HEX, "member_hash", "The requested member hash."},
             {RPCResult::Type::OBJ, "filters", "Applied filters.", {
                 {RPCResult::Type::STR_HEX, "asset_id", /*optional=*/true, "Filtered asset id."},
@@ -4862,6 +4872,8 @@ static RPCMethod getbitplusmemberassetstats()
             reconciliation_writer << holder_asset_count;
 
             UniValue result{UniValue::VOBJ};
+            result.pushKV("report_type", "member_asset_stats");
+            result.pushKV("report_version", 1);
             result.pushKV("member_hash", member_hash.ToString());
             result.pushKV("filters", filters_json);
             result.pushKV("searched_txouts", searched);

@@ -1350,6 +1350,93 @@ BOOST_AUTO_TEST_CASE(script_asset_whitelist_proof_commitments)
     BOOST_CHECK_EQUAL(bitplus::assets::ValidateAssetWhitelistProofOutput(output).reason, "asset-whitelist-proof-index-range");
 }
 
+BOOST_AUTO_TEST_CASE(script_asset_serialization_hash_stability)
+{
+    const bitplus::assets::AssetCommitment asset{
+        .type = bitplus::assets::AssetCommitmentType::TRANSFER,
+        .asset_id = uint256{1},
+        .amount = 0x0102030405060708ULL,
+        .metadata_hash = uint256{2},
+        .member_hash = uint256{3},
+    };
+    const std::vector<unsigned char> encoded_asset{bitplus::assets::EncodeAssetCommitment(asset)};
+    BOOST_REQUIRE_EQUAL(encoded_asset.size(), 8U + 1U + 1U + 32U + 8U + 32U + 32U);
+    BOOST_CHECK_EQUAL(std::string{encoded_asset.begin(), encoded_asset.begin() + 8}, "BTPASSET");
+    BOOST_CHECK_EQUAL(encoded_asset[8], bitplus::assets::ASSET_COMMITMENT_VERSION);
+    BOOST_CHECK_EQUAL(encoded_asset[9], static_cast<uint8_t>(bitplus::assets::AssetCommitmentType::TRANSFER));
+    BOOST_CHECK_EQUAL(HexStr(std::span<const unsigned char>{encoded_asset}.subspan(42, 8)), "0807060504030201");
+    BOOST_REQUIRE(bitplus::assets::DecodeAssetCommitment(encoded_asset).has_value());
+    BOOST_CHECK_EQUAL(*bitplus::assets::DecodeAssetCommitment(encoded_asset), asset);
+    BOOST_CHECK_EQUAL(bitplus::assets::EncodeAssetCommitment(*bitplus::assets::DecodeAssetCommitment(encoded_asset)), encoded_asset);
+    BOOST_CHECK_EQUAL(bitplus::assets::HashAssetCommitment(asset), bitplus::assets::HashAssetCommitment(*bitplus::assets::DecodeAssetCommitment(encoded_asset)));
+
+    std::vector<unsigned char> mutated_asset{encoded_asset};
+    mutated_asset[8] ^= 0x01;
+    BOOST_CHECK(!bitplus::assets::DecodeAssetCommitment(mutated_asset).has_value());
+    mutated_asset = encoded_asset;
+    mutated_asset.push_back(0);
+    BOOST_CHECK(!bitplus::assets::DecodeAssetCommitment(mutated_asset).has_value());
+
+    const bitplus::assets::AssetMetadataCommitment metadata{
+        .issuer_id = uint256{4},
+        .document_hash = uint256{5},
+        .rules_hash = uint256{6},
+    };
+    const std::vector<unsigned char> encoded_metadata{bitplus::assets::EncodeAssetMetadataCommitment(metadata)};
+    BOOST_REQUIRE_EQUAL(encoded_metadata.size(), 7U + 1U + 32U + 32U + 32U);
+    BOOST_CHECK_EQUAL(std::string{encoded_metadata.begin(), encoded_metadata.begin() + 7}, "BTPMETA");
+    BOOST_CHECK_EQUAL(encoded_metadata[7], bitplus::assets::ASSET_METADATA_VERSION);
+    BOOST_REQUIRE(bitplus::assets::DecodeAssetMetadataCommitment(encoded_metadata).has_value());
+    BOOST_CHECK_EQUAL(bitplus::assets::EncodeAssetMetadataCommitment(*bitplus::assets::DecodeAssetMetadataCommitment(encoded_metadata)), encoded_metadata);
+    BOOST_CHECK_EQUAL(bitplus::assets::HashAssetMetadataCommitment(metadata), bitplus::assets::HashAssetMetadataCommitment(*bitplus::assets::DecodeAssetMetadataCommitment(encoded_metadata)));
+
+    const bitplus::assets::AssetWhitelistCommitment whitelist{
+        .list_id = uint256{7},
+        .admin_key_hash = uint256{8},
+        .members_root = uint256{9},
+        .flags = 0x01020304,
+    };
+    const std::vector<unsigned char> encoded_whitelist{bitplus::assets::EncodeAssetWhitelistCommitment(whitelist)};
+    BOOST_REQUIRE_EQUAL(encoded_whitelist.size(), 7U + 1U + 32U + 32U + 32U + 4U);
+    BOOST_CHECK_EQUAL(std::string{encoded_whitelist.begin(), encoded_whitelist.begin() + 7}, "BTPWLST");
+    BOOST_CHECK_EQUAL(encoded_whitelist[7], bitplus::assets::ASSET_WHITELIST_VERSION);
+    BOOST_CHECK_EQUAL(HexStr(std::span<const unsigned char>{encoded_whitelist}.last(4)), "04030201");
+    BOOST_REQUIRE(bitplus::assets::DecodeAssetWhitelistCommitment(encoded_whitelist).has_value());
+    BOOST_CHECK_EQUAL(bitplus::assets::EncodeAssetWhitelistCommitment(*bitplus::assets::DecodeAssetWhitelistCommitment(encoded_whitelist)), encoded_whitelist);
+    BOOST_CHECK_EQUAL(bitplus::assets::HashAssetWhitelistCommitment(whitelist), bitplus::assets::HashAssetWhitelistCommitment(*bitplus::assets::DecodeAssetWhitelistCommitment(encoded_whitelist)));
+
+    const bitplus::assets::AssetWhitelistProofCommitment proof{
+        .asset_output_index = 0x01020304,
+        .member_hash = uint256{10},
+        .proof_index = 0x05060708,
+        .merkle_path = {uint256{11}, uint256{12}},
+    };
+    const std::vector<unsigned char> encoded_proof{bitplus::assets::EncodeAssetWhitelistProofCommitment(proof)};
+    BOOST_REQUIRE_EQUAL(encoded_proof.size(), 9U + 1U + 4U + 32U + 4U + 1U + 2U * 32U);
+    BOOST_CHECK_EQUAL(std::string{encoded_proof.begin(), encoded_proof.begin() + 9}, "BTPWPROOF");
+    BOOST_CHECK_EQUAL(encoded_proof[9], bitplus::assets::ASSET_WHITELIST_PROOF_VERSION);
+    BOOST_CHECK_EQUAL(HexStr(std::span<const unsigned char>{encoded_proof}.subspan(10, 4)), "04030201");
+    BOOST_CHECK_EQUAL(HexStr(std::span<const unsigned char>{encoded_proof}.subspan(46, 4)), "08070605");
+    BOOST_CHECK_EQUAL(encoded_proof[50], 2U);
+    BOOST_REQUIRE(bitplus::assets::DecodeAssetWhitelistProofCommitment(encoded_proof).has_value());
+    BOOST_CHECK_EQUAL(bitplus::assets::EncodeAssetWhitelistProofCommitment(*bitplus::assets::DecodeAssetWhitelistProofCommitment(encoded_proof)), encoded_proof);
+    BOOST_CHECK_EQUAL(bitplus::assets::HashAssetWhitelistProofCommitment(proof), bitplus::assets::HashAssetWhitelistProofCommitment(*bitplus::assets::DecodeAssetWhitelistProofCommitment(encoded_proof)));
+
+    bitplus::assets::AssetWhitelistProofCommitment max_depth_proof{proof};
+    max_depth_proof.merkle_path.assign(32, uint256{13});
+    const std::vector<unsigned char> encoded_max_depth_proof{bitplus::assets::EncodeAssetWhitelistProofCommitment(max_depth_proof)};
+    BOOST_REQUIRE(bitplus::assets::DecodeAssetWhitelistProofCommitment(encoded_max_depth_proof).has_value());
+    BOOST_CHECK_EQUAL(*bitplus::assets::DecodeAssetWhitelistProofCommitment(encoded_max_depth_proof), max_depth_proof);
+
+    bitplus::assets::AssetWhitelistProofCommitment too_deep_proof{proof};
+    too_deep_proof.merkle_path.assign(33, uint256{14});
+    BOOST_CHECK(!bitplus::assets::DecodeAssetWhitelistProofCommitment(bitplus::assets::EncodeAssetWhitelistProofCommitment(too_deep_proof)).has_value());
+
+    std::vector<unsigned char> truncated_proof{encoded_proof};
+    truncated_proof.pop_back();
+    BOOST_CHECK(!bitplus::assets::DecodeAssetWhitelistProofCommitment(truncated_proof).has_value());
+}
+
 BOOST_AUTO_TEST_CASE(script_asset_reference_validation)
 {
     const bitplus::assets::AssetWhitelistOutput whitelist_output{

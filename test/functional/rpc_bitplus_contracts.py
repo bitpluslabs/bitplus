@@ -606,6 +606,8 @@ class BitplusContractsRPCTest(BitplusTestFramework):
         ]
         asset_utxo_block = self.generate(wallet, 1)[0]
         scanned = node.scanbitplusassetutxos(asset_id, 20)
+        assert_equal(scanned["report_type"], "asset_utxo_scan")
+        assert_equal(scanned["report_version"], 1)
         assert_equal(scanned["asset_id"], asset_id)
         assert_hex_hash(scanned["reconciliation_hash"])
         assert_hex_hash(scanned["scan_summary_hash"])
@@ -779,6 +781,8 @@ class BitplusContractsRPCTest(BitplusTestFramework):
         assert_equal(node.scanbitplusassetutxos(asset_id, 10, {"type": "issuance"})["matches"], 0)
 
         stats = node.getbitplusassetstats(asset_id)
+        assert_equal(stats["report_type"], "asset_stats")
+        assert_equal(stats["report_version"], 1)
         assert_equal(stats["asset_id"], asset_id)
         assert_hex_hash(stats["reconciliation_hash"])
         assert_hex_hash(stats["reconciliation_summary_hash"])
@@ -881,6 +885,8 @@ class BitplusContractsRPCTest(BitplusTestFramework):
         assert_equal(node.getbitplusassetstats(asset_id, {"type": "issuance"})["utxo_count"], 0)
 
         member_stats = node.getbitplusmemberassetstats(HASH_C)
+        assert_equal(member_stats["report_type"], "member_asset_stats")
+        assert_equal(member_stats["report_version"], 1)
         assert_equal(member_stats["member_hash"], HASH_C)
         assert_hex_hash(member_stats["reconciliation_hash"])
         assert_hex_hash(member_stats["reconciliation_summary_hash"])

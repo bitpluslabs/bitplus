@@ -80,6 +80,14 @@ These items must be complete before any real-money institutional deployment:
 The external audit is a release gate, not an in-repo task. It must be performed
 by independent reviewers after the implementation and test suite stabilize.
 
+Audit-prep companion documents:
+
+- `doc/bitplus-threat-model.md`
+- `doc/bitplus-testnet-runbook.md`
+- `doc/bitplus-known-limitations.md`
+- `doc/bitplus-audit-checklist.md`
+- `doc/bitplus-fuzzing.md`
+
 ## Error Taxonomy
 
 Bitplus uses three broad error classes:
@@ -521,6 +529,9 @@ outputs matching an `asset_id`. Optional filters can narrow results by asset
 `type`, `metadata_hash`, `member_hash`, and `min_confirmations`. It returns
 bounded results with outpoint, amount, confirmation, block, script, and decoded
 commitment fields.
+All reconciliation-style reports return top-level `report_type` and
+`report_version` fields, so operator systems can route and version-check the
+response before inspecting nested summaries.
 If the result is truncated, `complete` is false and `next_cursor` can be passed
 back as the fourth argument to continue from the last returned outpoint. The
 cursor includes `cursor_version: 1` and is bound to the returned `bestblock`,

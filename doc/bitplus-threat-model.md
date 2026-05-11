@@ -23,8 +23,8 @@ chain. It does not add EVM-style arbitrary execution.
 - Operator mistakes from misspelled RPC fields, reused stale cursors, mixed
   pagination snapshots, or approval hashes computed over different reports.
 - Reorg and restart risk causing reports to silently mix chain states.
-- Denial of service through very large UTXO scans until a production asset index
-  exists.
+- Denial of service through very large stats UTXO scans and disabled or lagging
+  optional asset indexes.
 
 ## Trust Boundaries
 

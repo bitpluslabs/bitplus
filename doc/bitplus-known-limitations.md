@@ -3,9 +3,9 @@
 These limitations apply before external audit and before any real-funds launch.
 
 - Institutional contracts deployment is intentionally inactive by default.
-- There is no production asset index yet. Current asset scan and stats RPCs walk
-  the active UTXO set. This is correctness-first and useful for reconciliation,
-  but not low-latency for very large ledgers.
+- `-bitplusassetindex=1` enables a non-consensus live asset UTXO index for
+  `scanbitplusassetutxos`. Asset stats RPCs still use the correctness-first
+  active UTXO scan path and are not low-latency for very large ledgers.
 - Wallet UX is not production-complete. Current flows are raw transaction and
   PSBT oriented.
 - External legal/business records are not interpreted by consensus. The chain

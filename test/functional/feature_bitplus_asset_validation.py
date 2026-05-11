@@ -71,7 +71,7 @@ def asset_locking_script(member_hash=MEMBER_HASH):
 class BitplusAssetValidationTest(BitplusTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
-        self.extra_args = [["-acceptnonstdtxn=1", "-vbparams=institutional_contracts:0:999999999999:0"]]
+        self.extra_args = [["-acceptnonstdtxn=1", "-bitplusassetindex=1", "-vbparams=institutional_contracts:0:999999999999:0"]]
 
     def assert_mempool_result(self, tx, *, allowed, reject_reason=None):
         result = self.nodes[0].testmempoolaccept([tx.serialize().hex()])[0]
@@ -320,10 +320,12 @@ class BitplusAssetValidationTest(BitplusTestFramework):
     def run_test(self):
         node = self.nodes[0]
         wallet = MiniWallet(node, mode=MiniWalletMode.RAW_OP_TRUE)
+        self.wait_until(lambda: node.getindexinfo()["bitplusassetindex"]["synced"] is True)
 
         if not softfork_active(node, "institutional_contracts"):
             self.log.info("Mine to institutional_contracts activation")
             self.generate(wallet, 432)
+        self.wait_until(lambda: node.getindexinfo()["bitplusassetindex"]["synced"] is True)
         assert softfork_active(node, "institutional_contracts")
 
         self.log.info("Reject issuance missing linked metadata")

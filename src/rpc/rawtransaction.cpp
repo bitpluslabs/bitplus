@@ -9,6 +9,7 @@
 #include <consensus/amount.h>
 #include <consensus/validation.h>
 #include <core_io.h>
+#include <index/bitplusassetindex.h>
 #include <index/txindex.h>
 #include <key_io.h>
 #include <node/blockstorage.h>
@@ -4166,6 +4167,135 @@ static RPCMethod scanbitplusassetutxos()
 
             NodeContext& node = EnsureAnyNodeContext(request.context);
             ChainstateManager& chainman = EnsureChainman(node);
+
+            const CBlockIndex* indexed_tip{nullptr};
+            bool use_asset_index{false};
+            if (g_bitplus_asset_index && g_bitplus_asset_index->BlockUntilSyncedToCurrentChain()) {
+                {
+                    LOCK(cs_main);
+                    indexed_tip = CHECK_NONFATAL(chainman.ActiveChainstate().m_chain.Tip());
+                }
+                const IndexSummary index_summary{g_bitplus_asset_index->GetSummary()};
+                use_asset_index = index_summary.synced &&
+                    index_summary.best_block_height == indexed_tip->nHeight &&
+                    index_summary.best_block_hash == indexed_tip->GetBlockHash();
+            }
+            if (use_asset_index) {
+                const CBlockIndex* tip{indexed_tip};
+                if (scan_cursor.has_value()) {
+                    if (scan_cursor->bestblock != tip->GetBlockHash() || scan_cursor->height != tip->nHeight) {
+                        throw JSONRPCError(RPC_INVALID_PARAMETER, "cursor does not match the active chain tip");
+                    }
+                    if (scan_cursor->asset_id != asset_id) {
+                        throw JSONRPCError(RPC_INVALID_PARAMETER, "cursor asset_id does not match requested asset_id");
+                    }
+                    if (scan_cursor->filters_hash != filters_hash) {
+                        throw JSONRPCError(RPC_INVALID_PARAMETER, "cursor filters_hash does not match requested filters");
+                    }
+                }
+
+                int64_t searched{0};
+                bool complete{true};
+                bool cursor_found{false};
+                std::optional<COutPoint> last_returned;
+                UniValue utxos{UniValue::VARR};
+                HashWriter reconciliation_writer{};
+                WriteHashString(reconciliation_writer, "BitplusAssetUtxoScanV1");
+                reconciliation_writer << tip->GetBlockHash();
+                reconciliation_writer << static_cast<int64_t>(tip->nHeight);
+                reconciliation_writer << asset_id;
+                reconciliation_writer << static_cast<uint64_t>(max_results);
+                WriteAssetScanFiltersForHash(reconciliation_writer, filters);
+                WriteOptionalAssetScanCursorForHash(reconciliation_writer, scan_cursor);
+
+                const bool ok{g_bitplus_asset_index->ForEachAssetUtxo(
+                    asset_id,
+                    scan_cursor.has_value() ? std::optional<COutPoint>{scan_cursor->after} : std::optional<COutPoint>{},
+                    searched,
+                    cursor_found,
+                    [&](const COutPoint& outpoint, const BitplusAssetIndexEntry& entry) {
+                        const int64_t confirmations{static_cast<int64_t>(tip->nHeight - entry.height + 1)};
+                        if (!filters.Match(entry.commitment, confirmations)) return true;
+
+                        const CBlockIndex& coin_block{*CHECK_NONFATAL(tip->GetAncestor(entry.height))};
+                        bitplus::assets::AssetOutput asset_output{
+                            .output_index = outpoint.n,
+                            .carrier_amount = entry.carrier_amount,
+                            .commitment = entry.commitment,
+                            .locking_script = entry.locking_script,
+                        };
+                        UniValue utxo{UniValue::VOBJ};
+                        utxo.pushKV("txid", outpoint.hash.GetHex());
+                        utxo.pushKV("vout", static_cast<int64_t>(outpoint.n));
+                        utxo.pushKV("amount", ValueFromAmount(entry.carrier_amount));
+                        utxo.pushKV("scriptPubKey", HexStr(bitplus::assets::BuildAssetCommitmentScript(entry.commitment, entry.locking_script)));
+                        utxo.pushKV("coinbase", entry.coinbase);
+                        utxo.pushKV("height", static_cast<int64_t>(entry.height));
+                        utxo.pushKV("blockhash", coin_block.GetBlockHash().GetHex());
+                        utxo.pushKV("confirmations", confirmations);
+                        utxo.pushKV("commitment", DecodedAssetCommitmentToJSON(asset_output));
+                        utxos.push_back(std::move(utxo));
+                        reconciliation_writer << outpoint;
+                        reconciliation_writer << entry.carrier_amount;
+                        reconciliation_writer << bitplus::assets::BuildAssetCommitmentScript(entry.commitment, entry.locking_script);
+                        reconciliation_writer << entry.coinbase;
+                        reconciliation_writer << static_cast<int64_t>(entry.height);
+                        reconciliation_writer << coin_block.GetBlockHash();
+                        reconciliation_writer << bitplus::assets::EncodeAssetCommitment(entry.commitment);
+                        reconciliation_writer << entry.locking_script;
+                        last_returned = outpoint;
+                        if (utxos.size() >= max_results) {
+                            complete = false;
+                            return false;
+                        }
+                        return true;
+                    })};
+                if (!ok) throw JSONRPCError(RPC_INTERNAL_ERROR, "Bitplus asset index read failed");
+                if (!cursor_found) throw JSONRPCError(RPC_INVALID_PARAMETER, "cursor outpoint was not found in the active UTXO set");
+                ThrowIfActiveChainTipChangedDuringBitplusScan(chainman, *tip);
+
+                UniValue result{UniValue::VOBJ};
+                result.pushKV("report_type", "asset_utxo_scan");
+                result.pushKV("report_version", 1);
+                result.pushKV("asset_id", asset_id.ToString());
+                result.pushKV("filters", filters_json);
+                if (scan_cursor.has_value()) result.pushKV("cursor", BitplusAssetScanCursorToJSON(*tip, scan_cursor->asset_id, scan_cursor->filters_hash, scan_cursor->after));
+                result.pushKV("searched_txouts", searched);
+                result.pushKV("height", static_cast<int64_t>(tip->nHeight));
+                result.pushKV("bestblock", tip->GetBlockHash().GetHex());
+                result.pushKV("chain_snapshot", BitplusChainSnapshotToJSON(*tip));
+                reconciliation_writer << searched;
+                reconciliation_writer << complete;
+                reconciliation_writer << static_cast<int64_t>(utxos.size());
+                const std::string reconciliation_hash{reconciliation_writer.GetSHA256().ToString()};
+                result.pushKV("reconciliation_hash", reconciliation_hash);
+                UniValue scan_summary{UniValue::VOBJ};
+                scan_summary.pushKV("report_type", "asset_utxo_scan");
+                scan_summary.pushKV("summary_version", 1);
+                scan_summary.pushKV("asset_id", asset_id.ToString());
+                scan_summary.pushKV("filters", filters_json);
+                scan_summary.pushKV("filters_hash", filters_hash.ToString());
+                if (scan_cursor.has_value()) scan_summary.pushKV("cursor", BitplusAssetScanCursorToJSON(*tip, scan_cursor->asset_id, scan_cursor->filters_hash, scan_cursor->after));
+                scan_summary.pushKV("height", static_cast<int64_t>(tip->nHeight));
+                scan_summary.pushKV("bestblock", tip->GetBlockHash().GetHex());
+                const UniValue chain_snapshot{BitplusChainSnapshotToJSON(*tip)};
+                scan_summary.pushKV("chain_snapshot", chain_snapshot);
+                scan_summary.pushKV("chain_snapshot_hash", CompactReportHash("BitplusChainSnapshotV1", chain_snapshot).ToString());
+                scan_summary.pushKV("max_results", static_cast<int64_t>(max_results));
+                scan_summary.pushKV("searched_txouts", searched);
+                scan_summary.pushKV("cursor_applied", scan_cursor.has_value());
+                scan_summary.pushKV("complete", complete);
+                scan_summary.pushKV("has_next_cursor", !complete && last_returned.has_value());
+                scan_summary.pushKV("matches", static_cast<int64_t>(utxos.size()));
+                scan_summary.pushKV("reconciliation_hash", reconciliation_hash);
+                result.pushKV("scan_summary_hash", CompactReportHash("BitplusAssetUtxoScanSummaryV1", scan_summary).ToString());
+                result.pushKV("scan_summary", std::move(scan_summary));
+                result.pushKV("complete", complete);
+                if (!complete && last_returned.has_value()) result.pushKV("next_cursor", BitplusAssetScanCursorToJSON(*tip, asset_id, filters_hash, *last_returned));
+                result.pushKV("matches", static_cast<int64_t>(utxos.size()));
+                result.pushKV("utxos", std::move(utxos));
+                return result;
+            }
 
             std::unique_ptr<CCoinsViewCursor> cursor;
             const CBlockIndex* tip{nullptr};

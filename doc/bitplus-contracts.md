@@ -141,26 +141,31 @@ account state, external databases, or arbitrary program execution to consensus.
 
 ## Asset Index Design Review
 
-The current asset scan and stats RPCs intentionally walk the active UTXO set.
-That is simple and consensus-safe, and it remains useful as an audit and
-reconciliation path because the answer is derived directly from the node's
-current chainstate snapshot.
+The asset scan RPC has an optional non-consensus live UTXO index enabled with
+`-bitplusassetindex=1`. The original active UTXO scan remains the fallback when
+the index is disabled or temporarily not synced to the active tip.
 
-Large production venues should add an optional non-consensus asset index before
-operating at scale. The index should:
+The current index:
 
-- Key live outputs by `asset_id`, member hash, metadata hash, and asset type.
-- Store outpoint, amount, commitment fields, creating height, block hash, and
-  spent/unspent state.
-- Update atomically with block connect and disconnect so reorg behavior matches
-  the active chain.
-- Expose the same filters and equivalent reconciliation/report hashes as the
-  current scan RPCs, so operator workflows do not depend on whether the backend
-  is UTXO scanning or indexed lookup.
-- Stay outside consensus. A node without the index must still validate every
-  block and transaction with the same rules.
+- Keys live outputs by `asset_id`, member hash, and outpoint.
+- Stores outpoint, amount, commitment fields, creating height, locking script,
+  and coinbase status.
+- Updates with block connect and disconnect so reorg behavior matches the active
+  chain once the index catches up.
+- Stays outside consensus. A node without the index validates every block and
+  transaction with the same rules.
 
-Until that index exists, `scanbitplusassetutxos`, `getbitplusassetstats`, and
+Large production venues should extend the index before operating at scale. The
+next index work should:
+
+- Add secondary keys by metadata hash and asset type if those become dominant
+  query dimensions.
+- Route `getbitplusassetstats` and `getbitplusmemberassetstats` through indexed
+  lookup when the index is enabled and synced.
+- Keep equivalent reconciliation/report hashes so operator workflows do not
+  depend on whether the backend is UTXO scanning or indexed lookup.
+
+Until stats are indexed, `getbitplusassetstats` and
 `getbitplusmemberassetstats` should be treated as correctness-first
 reconciliation tools, not low-latency query engines for very large ledgers.
 
@@ -526,11 +531,12 @@ the exact reviewed package and its asset effects without digging through nested
 analysis. Unsigned or incomplete PSBTs are intentionally not ready to broadcast;
 they remain useful review packages until finalized.
 
-`scanbitplusassetutxos` scans the confirmed UTXO set for live Bitplus asset
-outputs matching an `asset_id`. Optional filters can narrow results by asset
-`type`, `metadata_hash`, `member_hash`, and `min_confirmations`. It returns
-bounded results with outpoint, amount, confirmation, block, script, and decoded
-commitment fields.
+`scanbitplusassetutxos` scans confirmed live Bitplus asset outputs matching an
+`asset_id`. With `-bitplusassetindex=1`, it uses the live asset index when that
+index is synced to the active tip; otherwise it falls back to the confirmed UTXO
+set. Optional filters can narrow results by asset `type`, `metadata_hash`,
+`member_hash`, and `min_confirmations`. It returns bounded results with
+outpoint, amount, confirmation, block, script, and decoded commitment fields.
 All reconciliation-style reports return top-level `report_type` and
 `report_version` fields, so operator systems can route and version-check the
 response before inspecting nested summaries.
@@ -554,9 +560,8 @@ schema, and `filters_hash` so they can compare the applied filters directly.
 `chain_snapshot` is also returned as a first-class object with `height` and
 `bestblock`, matching `checkbitplussettlement`; `chain_snapshot_hash` commits to
 that object.
-This is a lightweight reconciliation tool; a persistent asset index can be added
-later for large production operators that need low-latency queries over very
-large UTXO sets.
+This remains a reconciliation tool; the optional asset index reduces scan cost
+for large production operators without becoming part of consensus.
 
 `getbitplusassetstats` uses the same confirmed UTXO scan and optional filters,
 but returns aggregate reconciliation totals instead of individual outpoints. It

@@ -7,6 +7,7 @@
 
 #include <chainparams.h>
 #include <httpserver.h>
+#include <index/bitplusassetindex.h>
 #include <index/blockfilterindex.h>
 #include <index/coinstatsindex.h>
 #include <index/txindex.h>
@@ -400,6 +401,10 @@ static RPCMethod getindexinfo()
 
     if (g_txospenderindex) {
         result.pushKVs(SummaryToJSON(g_txospenderindex->GetSummary(), index_name));
+    }
+
+    if (g_bitplus_asset_index) {
+        result.pushKVs(SummaryToJSON(g_bitplus_asset_index->GetSummary(), index_name));
     }
 
     ForEachBlockFilterIndex([&result, &index_name](const BlockFilterIndex& index) {

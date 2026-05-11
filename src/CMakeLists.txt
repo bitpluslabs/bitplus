@@ -193,6 +193,7 @@ add_library(bitplus_node STATIC EXCLUDE_FROM_ALL
   httpserver.cpp
   i2p.cpp
   index/base.cpp
+  index/bitplusassetindex.cpp
   index/blockfilterindex.cpp
   index/coinstatsindex.cpp
   index/txindex.cpp

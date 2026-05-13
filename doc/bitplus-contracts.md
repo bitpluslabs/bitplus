@@ -44,22 +44,6 @@ Functional coverage includes an inactive-deployment test that mines a mismatched
 keeps the soft-fork boundary explicit: before activation, the opcode byte remains
 dormant and does not enforce the new covenant rule.
 
-## Implementation Order
-
-1. Covenants - started with `OP_CHECKOUTPUTVERIFY`
-2. Vault templates - started with script construction helpers
-3. HTLC templates - started with claim and refund script construction helpers
-4. Native asset commitment format - started with `BTPASSET` commitments
-5. Asset metadata commitments - started with `BTPMETA` commitments
-6. Whitelist rule commitments - started with `BTPWLST` commitments
-7. DvP templates - started with script construction helpers
-8. PvP templates - started with script construction helpers
-9. Collateral lock/release templates - started with script construction helpers
-10. Expiry/refund templates - started with script construction helpers
-
-Each consensus change must include tests, activation notes, and documentation of
-the difference from Bitcoin Core.
-
 ## Production Hardening Checklist
 
 These items must be complete before any real-money institutional deployment:
@@ -248,9 +232,10 @@ expiry.
 
 ## Native Asset Commitment Format
 
-The first native-asset step is a stable commitment payload. This does not yet
-enforce asset balances in consensus; it defines the bytes that later consensus
-rules, wallets, indexers, and settlement templates will share.
+Native assets use stable commitment payloads embedded in spendable UTXOs.
+Consensus validation recognizes these payloads when the institutional contracts
+deployment is active; wallet, index, and operator tooling use the same bytes for
+review and reconciliation.
 
 The payload is:
 
@@ -276,8 +261,8 @@ The script wrapper for asset state is spendable:
 
 The helper functions live in `src/script/bitplus_assets.*`. The asset payload is
 part of the UTXO's `scriptPubKey`, while `<locking_script>` controls who can
-spend that asset state. This keeps asset outputs in the UTXO set so later
-transactions can spend them and consensus can enforce asset conservation.
+spend that asset state. This keeps asset outputs in the UTXO set so follow-up
+transactions can spend them and active rules can enforce asset conservation.
 The default helper builds an executable member hashlock:
 
 ```text
@@ -302,10 +287,9 @@ The first validation layer is output extraction, not yet consensus enforcement.
 - Check conservation for a full transaction when its spent outputs are present
   in a `CCoinsViewCache`.
 
-This gives later consensus code a deterministic way to inspect native-asset
-commitments before enforcing conservation against spent-output asset state.
-Until that spent-output state is tracked, these helpers are intentionally
-non-consensus plumbing.
+This gives validation, wallet code, and operator tooling a deterministic way to
+inspect native-asset commitments before enforcing conservation against
+spent-output asset state.
 
 The conservation rule is:
 
@@ -684,7 +668,8 @@ Fields:
 - `document_hash`: 32 bytes. This commits to legal, offering, or operational
   documents kept off-chain.
 - `rules_hash`: 32 bytes. This commits to transfer restrictions, whitelist
-  policy, or settlement rules interpreted by later consensus and wallet logic.
+  policy, or settlement rules interpreted by Bitplus validation and wallet
+  logic.
 
 The initial script wrapper is:
 
@@ -852,8 +837,8 @@ This gives institutions two clear collateral paths:
 - Immediate release to a precommitted secured-party output after authorization.
 - Delayed return to a precommitted pledgor output after the lock period.
 
-The same template can lock BTP collateral today, and later native-asset consensus
-rules can extend the checked output to asset collateral commitments.
+The same template locks BTP collateral directly. Native-asset collateral is
+represented by the asset output templates and settlement checks described above.
 
 ## Expiry/Refund Templates
 

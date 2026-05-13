@@ -10,6 +10,7 @@
 #include <uint256.h>
 #include <util/translation.h>
 
+#include <limits>
 #include <vector>
 
 namespace bitplus::contracts {
@@ -44,6 +45,7 @@ util::Result<void> ValidatePositiveAmount(CAmount amount, const char* name)
 util::Result<void> ValidateNonNegativeLockValue(int64_t value, const char* name)
 {
     if (value < 0) return util::Error{Untranslated(strprintf("%s must be non-negative", name))};
+    if (value > std::numeric_limits<uint32_t>::max()) return util::Error{Untranslated(strprintf("%s out of range", name))};
     return {};
 }
 
@@ -59,6 +61,9 @@ util::Result<void> ValidateAssetLockingScript(const CScript& locking_script, con
 
 util::Result<void> ValidateAssetCarrier(const bitplus::assets::AssetCommitment& commitment, const CScript& locking_script, const char* name)
 {
+    if (commitment.type != bitplus::assets::AssetCommitmentType::TRANSFER) {
+        return util::Error{Untranslated(strprintf("%s commitment must be a transfer", name))};
+    }
     if (auto valid_lock{ValidateAssetLockingScript(locking_script, name)}; !valid_lock) return util::Error{util::ErrorString(valid_lock)};
 
     const CScript script_pub_key{bitplus::assets::BuildAssetCommitmentScript(commitment, locking_script)};

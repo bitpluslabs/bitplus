@@ -40,6 +40,7 @@
 #include <univalue.h>
 
 #include <array>
+#include <limits>
 
 // Uncomment if you want to output updated JSON tests.
 // #define UPDATE_JSON_TESTS
@@ -1114,6 +1115,10 @@ BOOST_AUTO_TEST_CASE(script_contract_checked_builders)
     BOOST_CHECK(!negative_delay);
     BOOST_CHECK_EQUAL(util::ErrorString(negative_delay).original, "relative_delay must be non-negative");
 
+    auto oversized_delay{bitplus::contracts::BuildVaultDelayedSpendLeafChecked(auth_script, static_cast<int64_t>(std::numeric_limits<uint32_t>::max()) + 1, output_script, 1, 0)};
+    BOOST_CHECK(!oversized_delay);
+    BOOST_CHECK_EQUAL(util::ErrorString(oversized_delay).original, "relative_delay out of range");
+
     auto null_secret{bitplus::contracts::BuildHtlcClaimLeafChecked(auth_script, uint256{}, output_script, 1, 0)};
     BOOST_CHECK(!null_secret);
     BOOST_CHECK_EQUAL(util::ErrorString(null_secret).original, "secret_hash must not be null");
@@ -1135,6 +1140,18 @@ BOOST_AUTO_TEST_CASE(script_contract_checked_builders)
         1)};
     BOOST_CHECK(!unspendable_asset_lock);
     BOOST_CHECK_EQUAL(util::ErrorString(unspendable_asset_lock).original, "asset_locking_script must be spendable");
+
+    bitplus::assets::AssetCommitment issuance{transfer};
+    issuance.type = bitplus::assets::AssetCommitmentType::ISSUANCE;
+    auto non_transfer_asset_leg{bitplus::contracts::BuildDvPSettlementLeafChecked(
+        auth_script,
+        issuance,
+        0,
+        output_script,
+        1,
+        1)};
+    BOOST_CHECK(!non_transfer_asset_leg);
+    BOOST_CHECK_EQUAL(util::ErrorString(non_transfer_asset_leg).original, "asset_locking_script commitment must be a transfer");
 
     auto valid_dvp{bitplus::contracts::BuildDvPSettlementLeafChecked(auth_script, transfer, 0, output_script, 1, 1)};
     BOOST_CHECK(valid_dvp);
@@ -1408,19 +1425,18 @@ BOOST_AUTO_TEST_CASE(script_asset_serialization_hash_stability)
         .member_hash = uint256{3},
     };
     const std::vector<unsigned char> encoded_asset{bitplus::assets::EncodeAssetCommitment(asset)};
-    BOOST_REQUIRE_EQUAL(encoded_asset.size(), 8U + 1U + 1U + 32U + 8U + 32U + 32U);
+    BOOST_REQUIRE_EQUAL(encoded_asset.size(), 8U + 1U + 32U + 8U + 32U + 32U);
     const std::string encoded_asset_magic{encoded_asset.begin(), encoded_asset.begin() + 8};
     BOOST_CHECK_EQUAL(encoded_asset_magic, "BTPASSET");
-    BOOST_CHECK_EQUAL(encoded_asset[8], bitplus::assets::ASSET_COMMITMENT_VERSION);
-    BOOST_CHECK_EQUAL(encoded_asset[9], static_cast<uint8_t>(bitplus::assets::AssetCommitmentType::TRANSFER));
-    BOOST_CHECK_EQUAL(HexStr(std::span<const unsigned char>{encoded_asset}.subspan(42, 8)), "0807060504030201");
+    BOOST_CHECK_EQUAL(encoded_asset[8], static_cast<uint8_t>(bitplus::assets::AssetCommitmentType::TRANSFER));
+    BOOST_CHECK_EQUAL(HexStr(std::span<const unsigned char>{encoded_asset}.subspan(41, 8)), "0807060504030201");
     BOOST_REQUIRE(bitplus::assets::DecodeAssetCommitment(encoded_asset).has_value());
     BOOST_CHECK(*bitplus::assets::DecodeAssetCommitment(encoded_asset) == asset);
     BOOST_CHECK(bitplus::assets::EncodeAssetCommitment(*bitplus::assets::DecodeAssetCommitment(encoded_asset)) == encoded_asset);
     BOOST_CHECK_EQUAL(bitplus::assets::HashAssetCommitment(asset), bitplus::assets::HashAssetCommitment(*bitplus::assets::DecodeAssetCommitment(encoded_asset)));
 
     std::vector<unsigned char> mutated_asset{encoded_asset};
-    mutated_asset[8] ^= 0x01;
+    mutated_asset[8] = 0xff;
     BOOST_CHECK(!bitplus::assets::DecodeAssetCommitment(mutated_asset).has_value());
     mutated_asset = encoded_asset;
     mutated_asset.push_back(0);
@@ -1432,10 +1448,9 @@ BOOST_AUTO_TEST_CASE(script_asset_serialization_hash_stability)
         .rules_hash = uint256{6},
     };
     const std::vector<unsigned char> encoded_metadata{bitplus::assets::EncodeAssetMetadataCommitment(metadata)};
-    BOOST_REQUIRE_EQUAL(encoded_metadata.size(), 7U + 1U + 32U + 32U + 32U);
+    BOOST_REQUIRE_EQUAL(encoded_metadata.size(), 7U + 32U + 32U + 32U);
     const std::string encoded_metadata_magic{encoded_metadata.begin(), encoded_metadata.begin() + 7};
     BOOST_CHECK_EQUAL(encoded_metadata_magic, "BTPMETA");
-    BOOST_CHECK_EQUAL(encoded_metadata[7], bitplus::assets::ASSET_METADATA_VERSION);
     BOOST_REQUIRE(bitplus::assets::DecodeAssetMetadataCommitment(encoded_metadata).has_value());
     BOOST_CHECK(bitplus::assets::EncodeAssetMetadataCommitment(*bitplus::assets::DecodeAssetMetadataCommitment(encoded_metadata)) == encoded_metadata);
     BOOST_CHECK_EQUAL(bitplus::assets::HashAssetMetadataCommitment(metadata), bitplus::assets::HashAssetMetadataCommitment(*bitplus::assets::DecodeAssetMetadataCommitment(encoded_metadata)));
@@ -1447,10 +1462,9 @@ BOOST_AUTO_TEST_CASE(script_asset_serialization_hash_stability)
         .flags = 0x01020304,
     };
     const std::vector<unsigned char> encoded_whitelist{bitplus::assets::EncodeAssetWhitelistCommitment(whitelist)};
-    BOOST_REQUIRE_EQUAL(encoded_whitelist.size(), 7U + 1U + 32U + 32U + 32U + 4U);
+    BOOST_REQUIRE_EQUAL(encoded_whitelist.size(), 7U + 32U + 32U + 32U + 4U);
     const std::string encoded_whitelist_magic{encoded_whitelist.begin(), encoded_whitelist.begin() + 7};
     BOOST_CHECK_EQUAL(encoded_whitelist_magic, "BTPWLST");
-    BOOST_CHECK_EQUAL(encoded_whitelist[7], bitplus::assets::ASSET_WHITELIST_VERSION);
     BOOST_CHECK_EQUAL(HexStr(std::span<const unsigned char>{encoded_whitelist}.last(4)), "04030201");
     BOOST_REQUIRE(bitplus::assets::DecodeAssetWhitelistCommitment(encoded_whitelist).has_value());
     BOOST_CHECK(bitplus::assets::EncodeAssetWhitelistCommitment(*bitplus::assets::DecodeAssetWhitelistCommitment(encoded_whitelist)) == encoded_whitelist);
@@ -1463,13 +1477,12 @@ BOOST_AUTO_TEST_CASE(script_asset_serialization_hash_stability)
         .merkle_path = {uint256{11}, uint256{12}},
     };
     const std::vector<unsigned char> encoded_proof{bitplus::assets::EncodeAssetWhitelistProofCommitment(proof)};
-    BOOST_REQUIRE_EQUAL(encoded_proof.size(), 9U + 1U + 4U + 32U + 4U + 1U + 2U * 32U);
+    BOOST_REQUIRE_EQUAL(encoded_proof.size(), 9U + 4U + 32U + 4U + 1U + 2U * 32U);
     const std::string encoded_proof_magic{encoded_proof.begin(), encoded_proof.begin() + 9};
     BOOST_CHECK_EQUAL(encoded_proof_magic, "BTPWPROOF");
-    BOOST_CHECK_EQUAL(encoded_proof[9], bitplus::assets::ASSET_WHITELIST_PROOF_VERSION);
-    BOOST_CHECK_EQUAL(HexStr(std::span<const unsigned char>{encoded_proof}.subspan(10, 4)), "04030201");
-    BOOST_CHECK_EQUAL(HexStr(std::span<const unsigned char>{encoded_proof}.subspan(46, 4)), "08070605");
-    BOOST_CHECK_EQUAL(encoded_proof[50], 2U);
+    BOOST_CHECK_EQUAL(HexStr(std::span<const unsigned char>{encoded_proof}.subspan(9, 4)), "04030201");
+    BOOST_CHECK_EQUAL(HexStr(std::span<const unsigned char>{encoded_proof}.subspan(45, 4)), "08070605");
+    BOOST_CHECK_EQUAL(encoded_proof[49], 2U);
     BOOST_REQUIRE(bitplus::assets::DecodeAssetWhitelistProofCommitment(encoded_proof).has_value());
     BOOST_CHECK(bitplus::assets::EncodeAssetWhitelistProofCommitment(*bitplus::assets::DecodeAssetWhitelistProofCommitment(encoded_proof)) == encoded_proof);
     BOOST_CHECK_EQUAL(bitplus::assets::HashAssetWhitelistProofCommitment(proof), bitplus::assets::HashAssetWhitelistProofCommitment(*bitplus::assets::DecodeAssetWhitelistProofCommitment(encoded_proof)));

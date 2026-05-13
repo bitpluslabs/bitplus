@@ -1412,7 +1412,6 @@ std::vector<RPCResult> ScriptPubKeyDoc() {
              {RPCResult::Type::STR, "type", "The type (one of: " + GetAllOutputTypes() + ")"},
              {RPCResult::Type::OBJ, "bitplus_asset", /*optional=*/true, "Decoded Bitplus native asset carrier commitment.", {
                  {RPCResult::Type::STR, "format", "Commitment format, BTPASSET."},
-                 {RPCResult::Type::NUM, "version", "Asset commitment version."},
                  {RPCResult::Type::STR, "type", "Asset commitment type: issuance, transfer, or burn."},
                  {RPCResult::Type::STR_HEX, "asset_id", "Asset id."},
                  {RPCResult::Type::NUM, "amount", "Asset amount."},
@@ -1429,7 +1428,6 @@ std::vector<RPCResult> ScriptPubKeyDoc() {
              }},
              {RPCResult::Type::OBJ, "bitplus_asset_metadata", /*optional=*/true, "Decoded Bitplus asset metadata commitment.", {
                  {RPCResult::Type::STR, "format", "Commitment format, BTPMETA."},
-                 {RPCResult::Type::NUM, "version", "Asset metadata commitment version."},
                  {RPCResult::Type::STR_HEX, "issuer_id", "Issuer identifier hash."},
                  {RPCResult::Type::STR_HEX, "document_hash", "Off-chain document hash."},
                  {RPCResult::Type::STR_HEX, "rules_hash", "Rules commitment hash."},
@@ -1437,7 +1435,6 @@ std::vector<RPCResult> ScriptPubKeyDoc() {
              }},
              {RPCResult::Type::OBJ, "bitplus_asset_whitelist", /*optional=*/true, "Decoded Bitplus whitelist rules commitment.", {
                  {RPCResult::Type::STR, "format", "Commitment format, BTPWLST."},
-                 {RPCResult::Type::NUM, "version", "Whitelist commitment version."},
                  {RPCResult::Type::STR_HEX, "list_id", "Whitelist identifier hash."},
                  {RPCResult::Type::STR_HEX, "admin_key_hash", "Admin key or policy hash."},
                  {RPCResult::Type::STR_HEX, "members_root", "Merkle root of approved members."},
@@ -1446,7 +1443,6 @@ std::vector<RPCResult> ScriptPubKeyDoc() {
              }},
              {RPCResult::Type::OBJ, "bitplus_asset_whitelist_proof", /*optional=*/true, "Decoded Bitplus whitelist membership proof commitment.", {
                  {RPCResult::Type::STR, "format", "Commitment format, BTPWPROOF."},
-                 {RPCResult::Type::NUM, "version", "Whitelist proof commitment version."},
                  {RPCResult::Type::NUM, "asset_output_index", "Asset transfer output index authorized by this proof."},
                  {RPCResult::Type::STR_HEX, "member_hash", "Settlement member hash."},
                  {RPCResult::Type::NUM, "proof_index", "Merkle proof leaf index."},

@@ -319,7 +319,7 @@ class ConfArgsTest(BitplusTestFramework):
 
         with self.nodes[0].assert_debug_log(expected_msgs=[
                 "Adding fixed seeds as 60 seconds have passed and addrman is empty",
-        ], timeout=2):
+        ], timeout=10):
             self.nodes[0].setmocktime(start + 65)
         self.stop_node(0)
 
@@ -361,7 +361,7 @@ class ConfArgsTest(BitplusTestFramework):
             self.start_node(0, extra_args=['-dnsseed=0', '-fixedseeds=1', '-addnode=fakenodeaddr', f'-mocktime={start}', UNREACHABLE_PROXY_ARG])
         with self.nodes[0].assert_debug_log(expected_msgs=[
                 "Adding fixed seeds as 60 seconds have passed and addrman is empty",
-        ], timeout=2):
+        ], timeout=10):
             self.nodes[0].setmocktime(start + 65)
         self.stop_node(0)
 

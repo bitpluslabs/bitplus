@@ -57,7 +57,7 @@ KEYS = [
     },
     {
         "xprv": "tprv8ZgxMBicQKsPdKziibn63Rm6aNzp7dSjDnufZMStXr71Huz7iihCRpbZZZ6Voy5HyuHCWx6foHMipzMzUq4tZrtkZ24DJwz5EeNWdsuwX5h",
-        "xpub": "tpubD6NzVbkrYhZ4Wo2WcFSgSqRD9QWkGxddo6WSqsVBx7uQ8QEtM7WncKDRjhFEexK119NigyCsFygA4b7sAPQxqebyFGAZ9XVV1BtpgNzbCRR",
+        "xpub": "tpubD6NzVbkrYhZ4Wo2WcFSgSqRD9QWkGxddo6WSqsVBx7uQ8QEtM7WncKDRjhFEexK119NigyCsFygA4b7sAPQxqebyFGAZ9XVV1BtcgNzbCRR",
         "pubs": [
             "03a669ea926f381582ec4a000b9472ba8a17347f5fb159eddd4a07036a6718eb",
             "bbf56b14b119bccafb686adec2e3d2a6b51b1626213590c3afa815d1fd36f85d",

@@ -55,7 +55,6 @@ def assert_hex_hash(value):
 def asset_payload(*, asset_type=2, asset_id=HASH_A, amount=1, metadata_hash=HASH_B, member_hash=MEMBER_HASH):
     return (
         b"BTPASSET"
-        + bytes([1])
         + bytes([asset_type])
         + bytes.fromhex(asset_id)
         + amount.to_bytes(8, "little")
@@ -185,7 +184,6 @@ class BitplusAssetValidationTest(BitplusTestFramework):
         tx = wallet.create_self_transfer(fee=Decimal("0.00010000"))["tx"]
         payload = (
             b"BTPMETA"
-            + bytes([1])
             + bytes.fromhex(issuer_id)
             + bytes.fromhex(document_hash)
             + bytes.fromhex(rules_hash)
@@ -238,7 +236,6 @@ class BitplusAssetValidationTest(BitplusTestFramework):
             members_root = HASH_C
         payload = (
             b"BTPWLST"
-            + bytes([1])
             + bytes.fromhex(list_id)
             + bytes.fromhex(admin_key_hash)
             + bytes.fromhex(members_root)
@@ -253,7 +250,6 @@ class BitplusAssetValidationTest(BitplusTestFramework):
             merkle_path = []
         payload = (
             b"BTPWPROOF"
-            + bytes([1])
             + asset_output_index.to_bytes(4, "little")
             + bytes.fromhex(member_hash)
             + proof_index.to_bytes(4, "little")
@@ -462,9 +458,19 @@ class BitplusAssetValidationTest(BitplusTestFramework):
 
         self.log.info("Verify asset reconciliation across spend-block invalidation")
         spent_scan = node.scanbitplusassetutxos(issuance["asset_id"], 10)
+        assert_equal(spent_scan["query_backend"], "asset_index")
+        assert "index_fallback_reason" not in spent_scan
+        assert "query_backend" not in spent_scan["scan_summary"]
+        assert "searched_txouts" not in spent_scan["scan_summary"]
+        assert "index_fallback_reason" not in spent_scan["scan_summary"]
         assert_equal(len([utxo for utxo in spent_scan["utxos"] if utxo["txid"] == issuance_txid and utxo["vout"] == TRANSFER_VOUT]), 0)
         assert_equal(len([utxo for utxo in spent_scan["utxos"] if utxo["txid"] == valid_spend_txid and utxo["commitment"]["type"] == "transfer"]), 1)
         spent_stats = node.getbitplusassetstats(issuance["asset_id"])
+        assert_equal(spent_stats["query_backend"], "asset_index")
+        assert "index_fallback_reason" not in spent_stats
+        assert "query_backend" not in spent_stats["reconciliation_summary"]
+        assert "searched_txouts" not in spent_stats["reconciliation_summary"]
+        assert "index_fallback_reason" not in spent_stats["reconciliation_summary"]
         assert_hex_hash(spent_stats["reconciliation_hash"])
         assert_equal(spent_stats["utxo_count"], 3)
         assert_equal(spent_stats["total_amount"], 1000)
@@ -480,6 +486,35 @@ class BitplusAssetValidationTest(BitplusTestFramework):
         assert_equal(spent_stats["by_type"]["transfer"]["amount"], 300)
         assert_equal(spent_stats["by_type"]["burn"]["amount"], 200)
         assert_equal(spent_stats["by_holder_member_hash"][MEMBER_HASH]["amount"], 300)
+
+        member_spent_stats = node.getbitplusmemberassetstats(MEMBER_HASH, {"asset_id": issuance["asset_id"]})
+        assert_equal(member_spent_stats["query_backend"], "asset_index")
+        assert "index_fallback_reason" not in member_spent_stats
+        assert "query_backend" not in member_spent_stats["reconciliation_summary"]
+        assert "searched_txouts" not in member_spent_stats["reconciliation_summary"]
+        assert "index_fallback_reason" not in member_spent_stats["reconciliation_summary"]
+        assert_equal(member_spent_stats["utxo_count"], spent_stats["utxo_count"])
+
+        self.log.info("Verify indexed and fallback reconciliation hashes match")
+        self.restart_node(0, extra_args=["-acceptnonstdtxn=1", "-vbparams=institutional_contracts:0:999999999999:0"])
+        node = self.nodes[0]
+        fallback_scan = node.scanbitplusassetutxos(issuance["asset_id"], 10)
+        assert_equal(fallback_scan["query_backend"], "utxo_scan")
+        assert "index_fallback_reason" not in fallback_scan
+        assert_equal(fallback_scan["reconciliation_hash"], spent_scan["reconciliation_hash"])
+        assert_equal(fallback_scan["scan_summary_hash"], spent_scan["scan_summary_hash"])
+        fallback_stats = node.getbitplusassetstats(issuance["asset_id"])
+        assert_equal(fallback_stats["query_backend"], "utxo_scan")
+        assert "index_fallback_reason" not in fallback_stats
+        assert_equal(fallback_stats["reconciliation_hash"], spent_stats["reconciliation_hash"])
+        assert_equal(fallback_stats["reconciliation_summary_hash"], spent_stats["reconciliation_summary_hash"])
+        fallback_member_stats = node.getbitplusmemberassetstats(MEMBER_HASH, {"asset_id": issuance["asset_id"]})
+        assert_equal(fallback_member_stats["query_backend"], "utxo_scan")
+        assert "index_fallback_reason" not in fallback_member_stats
+        assert_equal(fallback_member_stats["reconciliation_hash"], member_spent_stats["reconciliation_hash"])
+        assert_equal(fallback_member_stats["reconciliation_summary_hash"], member_spent_stats["reconciliation_summary_hash"])
+        self.restart_node(0)
+        node = self.nodes[0]
 
         node.invalidateblock(spend_block)
         assert valid_spend_txid in node.getrawmempool()

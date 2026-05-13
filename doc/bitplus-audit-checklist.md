@@ -20,12 +20,12 @@ coverage for external reviewers.
 
 ## Reviewer Focus Areas
 
-- Serialization stability and version/domain strategy.
+- Serialization stability, fixed field layouts, and domain-separated hashes.
 - Consensus activation boundaries.
 - Asset conservation and issuance anchor rules.
 - Whitelist proof linkage and duplicate/orphan handling.
 - Reorg behavior for reconciliation reports.
 - RPC readiness hash completeness.
 - Denial-of-service profile of UTXO scans and optional asset-index fallback.
-- Upgrade plan for cursor/report schema versions.
+- Upgrade plan for cursor/report schema changes without ambiguity.
 - Fuzz corpus coverage for valid and malformed Bitplus asset payloads.

@@ -30,19 +30,17 @@ static constexpr std::array<unsigned char, 9> ASSET_WHITELIST_PROOF_MAGIC{
     'B', 'T', 'P', 'W', 'P', 'R', 'O', 'O', 'F'
 };
 static constexpr size_t ASSET_COMMITMENT_SIZE{
-    ASSET_COMMITMENT_MAGIC.size() + 1 + 1 + uint256::size() + sizeof(uint64_t) + uint256::size() + uint256::size()
+    ASSET_COMMITMENT_MAGIC.size() + 1 + uint256::size() + sizeof(uint64_t) + uint256::size() + uint256::size()
 };
 static constexpr size_t ASSET_METADATA_SIZE{
-    ASSET_METADATA_MAGIC.size() + 1 + uint256::size() + uint256::size() + uint256::size()
+    ASSET_METADATA_MAGIC.size() + uint256::size() + uint256::size() + uint256::size()
 };
 static constexpr size_t ASSET_WHITELIST_SIZE{
-    ASSET_WHITELIST_MAGIC.size() + 1 + uint256::size() + uint256::size() + uint256::size() + sizeof(uint32_t)
+    ASSET_WHITELIST_MAGIC.size() + uint256::size() + uint256::size() + uint256::size() + sizeof(uint32_t)
 };
 static constexpr size_t ASSET_WHITELIST_PROOF_FIXED_SIZE{
-    ASSET_WHITELIST_PROOF_MAGIC.size() + 1 + sizeof(uint32_t) + uint256::size() + sizeof(uint32_t) + 1
+    ASSET_WHITELIST_PROOF_MAGIC.size() + sizeof(uint32_t) + uint256::size() + sizeof(uint32_t) + 1
 };
-static constexpr size_t MAX_WHITELIST_PROOF_DEPTH{32};
-
 bool IsKnownType(uint8_t type)
 {
     return type == static_cast<uint8_t>(AssetCommitmentType::ISSUANCE) ||
@@ -91,7 +89,6 @@ std::vector<unsigned char> EncodeAssetCommitment(const AssetCommitment& commitme
     std::vector<unsigned char> payload;
     payload.reserve(ASSET_COMMITMENT_SIZE);
     payload.insert(payload.end(), ASSET_COMMITMENT_MAGIC.begin(), ASSET_COMMITMENT_MAGIC.end());
-    payload.push_back(ASSET_COMMITMENT_VERSION);
     payload.push_back(static_cast<uint8_t>(commitment.type));
     payload.insert(payload.end(), commitment.asset_id.begin(), commitment.asset_id.end());
 
@@ -110,8 +107,6 @@ std::optional<AssetCommitment> DecodeAssetCommitment(std::span<const unsigned ch
     if (!std::equal(ASSET_COMMITMENT_MAGIC.begin(), ASSET_COMMITMENT_MAGIC.end(), payload.begin())) return std::nullopt;
 
     size_t offset{ASSET_COMMITMENT_MAGIC.size()};
-    if (payload[offset++] != ASSET_COMMITMENT_VERSION) return std::nullopt;
-
     const uint8_t raw_type{payload[offset++]};
     if (!IsKnownType(raw_type)) return std::nullopt;
 
@@ -425,7 +420,6 @@ std::vector<unsigned char> EncodeAssetMetadataCommitment(const AssetMetadataComm
     std::vector<unsigned char> payload;
     payload.reserve(ASSET_METADATA_SIZE);
     payload.insert(payload.end(), ASSET_METADATA_MAGIC.begin(), ASSET_METADATA_MAGIC.end());
-    payload.push_back(ASSET_METADATA_VERSION);
     payload.insert(payload.end(), commitment.issuer_id.begin(), commitment.issuer_id.end());
     payload.insert(payload.end(), commitment.document_hash.begin(), commitment.document_hash.end());
     payload.insert(payload.end(), commitment.rules_hash.begin(), commitment.rules_hash.end());
@@ -438,8 +432,6 @@ std::optional<AssetMetadataCommitment> DecodeAssetMetadataCommitment(std::span<c
     if (!std::equal(ASSET_METADATA_MAGIC.begin(), ASSET_METADATA_MAGIC.end(), payload.begin())) return std::nullopt;
 
     size_t offset{ASSET_METADATA_MAGIC.size()};
-    if (payload[offset++] != ASSET_METADATA_VERSION) return std::nullopt;
-
     AssetMetadataCommitment commitment;
     commitment.issuer_id = uint256{payload.subspan(offset, uint256::size())};
     offset += uint256::size();
@@ -547,7 +539,6 @@ std::vector<unsigned char> EncodeAssetWhitelistCommitment(const AssetWhitelistCo
     std::vector<unsigned char> payload;
     payload.reserve(ASSET_WHITELIST_SIZE);
     payload.insert(payload.end(), ASSET_WHITELIST_MAGIC.begin(), ASSET_WHITELIST_MAGIC.end());
-    payload.push_back(ASSET_WHITELIST_VERSION);
     payload.insert(payload.end(), commitment.list_id.begin(), commitment.list_id.end());
     payload.insert(payload.end(), commitment.admin_key_hash.begin(), commitment.admin_key_hash.end());
     payload.insert(payload.end(), commitment.members_root.begin(), commitment.members_root.end());
@@ -564,8 +555,6 @@ std::optional<AssetWhitelistCommitment> DecodeAssetWhitelistCommitment(std::span
     if (!std::equal(ASSET_WHITELIST_MAGIC.begin(), ASSET_WHITELIST_MAGIC.end(), payload.begin())) return std::nullopt;
 
     size_t offset{ASSET_WHITELIST_MAGIC.size()};
-    if (payload[offset++] != ASSET_WHITELIST_VERSION) return std::nullopt;
-
     AssetWhitelistCommitment commitment;
     commitment.list_id = uint256{payload.subspan(offset, uint256::size())};
     offset += uint256::size();
@@ -750,7 +739,6 @@ std::vector<unsigned char> EncodeAssetWhitelistProofCommitment(const AssetWhitel
     std::vector<unsigned char> payload;
     payload.reserve(ASSET_WHITELIST_PROOF_FIXED_SIZE + commitment.merkle_path.size() * uint256::size());
     payload.insert(payload.end(), ASSET_WHITELIST_PROOF_MAGIC.begin(), ASSET_WHITELIST_PROOF_MAGIC.end());
-    payload.push_back(ASSET_WHITELIST_PROOF_VERSION);
 
     std::array<unsigned char, sizeof(uint32_t)> output_index;
     WriteLE32(output_index.data(), commitment.asset_output_index);
@@ -775,8 +763,6 @@ std::optional<AssetWhitelistProofCommitment> DecodeAssetWhitelistProofCommitment
     if (!std::equal(ASSET_WHITELIST_PROOF_MAGIC.begin(), ASSET_WHITELIST_PROOF_MAGIC.end(), payload.begin())) return std::nullopt;
 
     size_t offset{ASSET_WHITELIST_PROOF_MAGIC.size()};
-    if (payload[offset++] != ASSET_WHITELIST_PROOF_VERSION) return std::nullopt;
-
     AssetWhitelistProofCommitment commitment;
     commitment.asset_output_index = ReadLE32(payload.subspan(offset, sizeof(uint32_t)).data());
     offset += sizeof(uint32_t);

@@ -32,7 +32,7 @@ The institutional contract scope is fixed to these primitives:
 
 ## Activation
 
-Institutional contracts are represented by the dormant versionbits deployment
+Institutional contracts are represented by the dormant activation deployment
 `institutional_contracts`.
 
 The deployment is intentionally set to `NEVER_ACTIVE` on all networks until the
@@ -123,17 +123,15 @@ format follows these rules:
 
 - Every commitment family has a fixed ASCII magic prefix: `BTPASSET`, `BTPMETA`,
   `BTPWLST`, or `BTPWPROOF`.
-- Every commitment family carries an explicit version byte. The current version
-  is `1`; incompatible encoding changes must use a new version.
 - Integer fields are serialized in one fixed form: asset amounts are little-endian
   64-bit values, whitelist flags are little-endian 32-bit values, and whitelist
   proof indexes are little-endian 32-bit values.
 - Hashes commit to the encoded payload bytes or to explicit domain-separated
   `HashWriter` records. Asset ids commit to the metadata hash and the issuing
   input outpoint.
-- Operator report hashes use versioned domains such as
-  `BitplusAssetUtxoScanSummaryV1`. If a report schema changes in a way that
-  affects approvals or audit records, its domain or summary version must change.
+- Operator report hashes use explicit Bitplus domains, deterministic field
+  ordering, and documented payloads so approvals and audit records can compare
+  the same bytes across nodes.
 
 The consensus rule is intentionally narrow: nodes validate locally from the
 transaction, spent outputs, and active deployment state. Bitplus does not add
@@ -141,9 +139,9 @@ account state, external databases, or arbitrary program execution to consensus.
 
 ## Asset Index Design Review
 
-The asset scan RPC has an optional non-consensus live UTXO index enabled with
-`-bitplusassetindex=1`. The original active UTXO scan remains the fallback when
-the index is disabled or temporarily not synced to the active tip.
+The asset scan and stats RPCs have an optional non-consensus live UTXO index
+enabled with `-bitplusassetindex=1`. The original active UTXO scan remains the
+fallback when the index is disabled or temporarily not synced to the active tip.
 
 The current index:
 
@@ -160,14 +158,12 @@ next index work should:
 
 - Add secondary keys by metadata hash and asset type if those become dominant
   query dimensions.
-- Route `getbitplusassetstats` and `getbitplusmemberassetstats` through indexed
-  lookup when the index is enabled and synced.
 - Keep equivalent reconciliation/report hashes so operator workflows do not
   depend on whether the backend is UTXO scanning or indexed lookup.
 
-Until stats are indexed, `getbitplusassetstats` and
-`getbitplusmemberassetstats` should be treated as correctness-first
-reconciliation tools, not low-latency query engines for very large ledgers.
+The index is still optional and non-consensus. Operators should monitor
+`getindexinfo("bitplusassetindex")`; RPCs use the active UTXO scan fallback if
+the index is unavailable or not synced.
 
 ## Covenant Primitive
 
@@ -259,13 +255,11 @@ rules, wallets, indexers, and settlement templates will share.
 The payload is:
 
 ```text
-"BTPASSET" || version || type || asset_id || amount || metadata_hash ||
-member_hash
+"BTPASSET" || type || asset_id || amount || metadata_hash || member_hash
 ```
 
 Fields:
 
-- `version`: 1 byte, currently `1`.
 - `type`: 1 byte. `1` issuance, `2` transfer, `3` burn.
 - `asset_id`: 32 bytes. For issuance, this must equal the issuance-anchored
   asset id described below.
@@ -501,8 +495,8 @@ and runs mempool test-accept for final transactions. The default
 for 10-minute blocks; operators can set it to 0 for dry runs or stricter/lower
 values for venue policy.
 The result includes `ready_to_broadcast`, `issues`, `warnings`, and the detailed
-`bitplus_analysis` object. `readiness_policy` records the versioned operator
-policy knobs used by the gate: input format, mempool-check requirement,
+`bitplus_analysis` object. `readiness_policy` records the operator policy knobs
+used by the gate: input format, mempool-check requirement,
 `maxfeerate`, `min_input_confirmations`, and the fixed requirements that
 institutional contracts are active and Bitplus prevout review is complete. It
 also reports `chain_snapshot` with the active chain height and best block hash,
@@ -537,17 +531,15 @@ index is synced to the active tip; otherwise it falls back to the confirmed UTXO
 set. Optional filters can narrow results by asset `type`, `metadata_hash`,
 `member_hash`, and `min_confirmations`. It returns bounded results with
 outpoint, amount, confirmation, block, script, and decoded commitment fields.
-All reconciliation-style reports return top-level `report_type` and
-`report_version` fields, so operator systems can route and version-check the
-response before inspecting nested summaries.
+All reconciliation-style reports return top-level `report_type`, so operator
+systems can route the response before inspecting nested summaries.
 If the result is truncated, `complete` is false and `next_cursor` can be passed
 back as the fourth argument to continue from the last returned outpoint. The
-cursor includes `cursor_version: 1` and is bound to the returned `bestblock`,
-`height`, `asset_id`, and `filters_hash`; the node rejects it if the active
-chain tip changed, if the cursor version is unsupported, or if the caller tries
-to reuse it with a different asset id or filter set. This prevents operators
-from accidentally reconciling pages from different chain snapshots, different
-scan queries, or incompatible cursor formats.
+cursor is bound to the returned `bestblock`, `height`, `asset_id`, and
+`filters_hash`; the node rejects it if the active chain tip changed or if the
+caller tries to reuse it with a different asset id or filter set. This prevents
+operators from accidentally reconciling pages from different chain snapshots or
+different scan queries.
 `reconciliation_hash` commits to the active-chain snapshot, filters, completion
 flag, continuation cursor, and returned UTXO rows for the bounded result page.
 This lets two operators compare the exact scan result they reviewed.
@@ -555,18 +547,24 @@ This lets two operators compare the exact scan result they reviewed.
 cursor, chain snapshot, `max_results`, cursor use, completion status, match
 count, and `reconciliation_hash`; `scan_summary_hash` commits to that compact
 page summary for approvals that do not need every returned UTXO row. The summary
-includes `summary_version` so operators can pin approval workflows to a stable
-schema, and `filters_hash` so they can compare the applied filters directly.
+includes `filters_hash` so operators can compare the applied filters directly.
 `chain_snapshot` is also returned as a first-class object with `height` and
 `bestblock`, matching `checkbitplussettlement`; `chain_snapshot_hash` commits to
 that object.
 This remains a reconciliation tool; the optional asset index reduces scan cost
-for large production operators without becoming part of consensus.
+for large production operators without becoming part of consensus. RPCs return
+`query_backend` (`asset_index` or `utxo_scan`) and `searched_txouts` for
+operations, but `reconciliation_hash` and `scan_summary_hash` do not commit to
+backend-specific search costs so indexed and scan-backed nodes can compare the
+same ledger result. If a synced optional index is selected but cannot be read
+consistently, the RPC falls back to the active UTXO scan and returns
+`index_fallback_reason`.
 
-`getbitplusassetstats` uses the same confirmed UTXO scan and optional filters,
-but returns aggregate reconciliation totals instead of individual outpoints. It
-reports live matching UTXO count, total asset units, and count/amount breakdowns
-by asset type, metadata hash, and member hash. `min_confirmations` lets
+`getbitplusassetstats` uses the same indexed-or-scan backend and optional
+filters, but returns aggregate reconciliation totals instead of individual
+outpoints. It reports live matching UTXO count, total asset units, and
+count/amount breakdowns by asset type, metadata hash, and member hash.
+`min_confirmations` lets
 operators reconcile only balances that have reached venue-required security
 depth, such as six confirmations for one-hour Bitcoin-style finality. Matching
 stats include `min_confirmations_observed` and `max_confirmations_observed`, and
@@ -590,9 +588,11 @@ chain snapshot, confirmation range, and `reconciliation_hash` in a compact
 operator-facing object for approvals and audit records.
 `reconciliation_summary_hash` commits to that compact summary alone, while
 `reconciliation_hash` commits to the full breakdown. The summary includes
-`summary_version` so later summary changes can be introduced explicitly, plus
 `filters_hash` for direct comparison of the filtered view and
 `chain_snapshot_hash` for direct comparison of the active-chain snapshot.
+`query_backend`, `searched_txouts`, and `index_fallback_reason` are top-level
+operational fields; they can differ between indexed and scan-backed nodes
+without changing the reconciliation hash or compact summary hash.
 
 `getbitplusmemberassetstats` summarizes confirmed live asset UTXOs for one
 member hash, grouped by `asset_id`. Optional filters can restrict the view by
@@ -607,9 +607,11 @@ also returns a `reconciliation_hash` over the chain snapshot, member hash,
 filters, totals, confirmation ranges, and per-asset breakdowns. Its
 `reconciliation_summary` gives the same compact approval view, including
 filters, for participant reconciliation, and `reconciliation_summary_hash` lets
-operators compare that compact view directly. The same `summary_version` field
-is present for participant reports, along with `filters_hash`.
-Participant summaries also include `chain_snapshot_hash`.
+operators compare that compact view directly. Participant summaries include
+`filters_hash` and `chain_snapshot_hash`.
+As with asset-level stats, participant `query_backend`, `searched_txouts`, and
+`index_fallback_reason` describe how the report was produced and are top-level
+operational fields, not part of the reconciliation hash or compact summary hash.
 
 `createbitplusassetwhitelistroot` computes the whitelist `members_root` from an
 ordered list of member hashes. If `proof_index` is provided, it also returns the
@@ -673,12 +675,11 @@ metadata_hash = SHA256(asset_metadata_commitment_payload)
 The metadata payload is:
 
 ```text
-"BTPMETA" || version || issuer_id || document_hash || rules_hash
+"BTPMETA" || issuer_id || document_hash || rules_hash
 ```
 
 Fields:
 
-- `version`: 1 byte, currently `1`.
 - `issuer_id`: 32 bytes. This identifies the issuing institution or policy root.
 - `document_hash`: 32 bytes. This commits to legal, offering, or operational
   documents kept off-chain.
@@ -707,12 +708,11 @@ rules_hash = SHA256(asset_whitelist_commitment_payload)
 The whitelist payload is:
 
 ```text
-"BTPWLST" || version || list_id || admin_key_hash || members_root || flags
+"BTPWLST" || list_id || admin_key_hash || members_root || flags
 ```
 
 Fields:
 
-- `version`: 1 byte, currently `1`.
 - `list_id`: 32 bytes. This identifies the whitelist or compliance program.
 - `admin_key_hash`: 32 bytes. This commits to the key or key policy allowed to
   update or attest to the whitelist.
@@ -732,13 +732,12 @@ Asset transfers are whitelisted by a proof commitment that points at the asset
 transfer output it authorizes:
 
 ```text
-"BTPWPROOF" || version || asset_output_index || member_hash || proof_index ||
-path_count || merkle_path
+"BTPWPROOF" || asset_output_index || member_hash || proof_index || path_count ||
+merkle_path
 ```
 
 Fields:
 
-- `version`: 1 byte, currently `1`.
 - `asset_output_index`: 4 byte little-endian index of the `TRANSFER` output.
 - `member_hash`: 32 bytes. This commits to the approved settlement member.
 - `proof_index`: 4 byte little-endian Merkle leaf index.

@@ -537,7 +537,7 @@ void SetupServerArgs(ArgsManager& argsman, bool can_listen_ipc)
 #endif
     argsman.AddArg("-txindex", strprintf("Maintain a full transaction index, used by the getrawtransaction rpc call (default: %u)", DEFAULT_TXINDEX), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-txospenderindex", strprintf("Maintain a transaction output spender index, used by the gettxspendingprevout rpc call (default: %u)", DEFAULT_TXOSPENDERINDEX), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
-    argsman.AddArg("-bitplusassetindex", strprintf("Maintain a live Bitplus asset UTXO index for asset scan RPCs (default: %u)", DEFAULT_BITPLUSASSETINDEX), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-bitplusassetindex", strprintf("Maintain a live Bitplus asset UTXO index for asset scan and stats RPCs (default: %u)", DEFAULT_BITPLUSASSETINDEX), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-blockfilterindex=<type>",
                  strprintf("Maintain an index of compact filters by block (default: %s, values: %s).", DEFAULT_BLOCKFILTERINDEX, ListBlockFilterTypes()) +
                  " If <type> is not supplied or if <type> = 1, indexes for all known types are enabled.",

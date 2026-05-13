@@ -250,6 +250,10 @@ add_library(bitplus_node STATIC EXCLUDE_FROM_ALL
   policy/truc_policy.cpp
   private_broadcast.cpp
   rest.cpp
+  rpc/bitplus_assets.cpp
+  rpc/bitplus_contracts.cpp
+  rpc/bitplus_reports.cpp
+  rpc/bitplus_settlement.cpp
   rpc/blockchain.cpp
   rpc/external_signer.cpp
   rpc/fees.cpp
@@ -258,6 +262,7 @@ add_library(bitplus_node STATIC EXCLUDE_FROM_ALL
   rpc/net.cpp
   rpc/node.cpp
   rpc/output_script.cpp
+  rpc/rawtransaction_psbt.cpp
   rpc/rawtransaction.cpp
   rpc/server.cpp
   rpc/server_util.cpp

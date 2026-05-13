@@ -430,7 +430,7 @@ class BitplusContractsRPCTest(BitplusTestFramework):
         assert_hex_hash(ready_plain["readiness_report_hash"])
         assert_greater_than(ready_plain["chain_snapshot"]["height"], 0)
         assert_hex_hash(ready_plain["chain_snapshot"]["bestblock"])
-        assert_equal(ready_plain["readiness_policy"]["version"], "BitplusSettlementReadinessV1")
+        assert_equal(ready_plain["readiness_policy"]["policy"], "BitplusSettlementReadiness")
         assert_equal(ready_plain["readiness_policy"]["format"], "raw")
         assert_equal(ready_plain["readiness_policy"]["check_mempool"], True)
         assert_greater_than(ready_plain["readiness_policy"]["maxfeerate"], 0)
@@ -631,12 +631,12 @@ class BitplusContractsRPCTest(BitplusTestFramework):
         asset_utxo_block = self.generate(wallet, 1)[0]
         scanned = node.scanbitplusassetutxos(asset_id, 20)
         assert_equal(scanned["report_type"], "asset_utxo_scan")
-        assert_equal(scanned["report_version"], 1)
         assert_equal(scanned["asset_id"], asset_id)
+        assert_equal(scanned["query_backend"], "utxo_scan")
+        assert "index_fallback_reason" not in scanned
         assert_hex_hash(scanned["reconciliation_hash"])
         assert_hex_hash(scanned["scan_summary_hash"])
         assert_equal(scanned["scan_summary"]["report_type"], "asset_utxo_scan")
-        assert_equal(scanned["scan_summary"]["summary_version"], 1)
         assert_equal(scanned["scan_summary"]["asset_id"], scanned["asset_id"])
         assert_equal(scanned["scan_summary"]["filters"], scanned["filters"])
         assert_hex_hash(scanned["scan_summary"]["filters_hash"])
@@ -648,7 +648,9 @@ class BitplusContractsRPCTest(BitplusTestFramework):
         assert_equal(scanned["scan_summary"]["chain_snapshot"], scanned["chain_snapshot"])
         assert_hex_hash(scanned["scan_summary"]["chain_snapshot_hash"])
         assert_equal(scanned["scan_summary"]["max_results"], 20)
-        assert_equal(scanned["scan_summary"]["searched_txouts"], scanned["searched_txouts"])
+        assert "index_fallback_reason" not in scanned["scan_summary"]
+        assert "query_backend" not in scanned["scan_summary"]
+        assert "searched_txouts" not in scanned["scan_summary"]
         assert_equal(scanned["scan_summary"]["cursor_applied"], False)
         assert_equal(scanned["scan_summary"]["reconciliation_hash"], scanned["reconciliation_hash"])
         assert_equal(scanned["complete"], True)
@@ -674,19 +676,16 @@ class BitplusContractsRPCTest(BitplusTestFramework):
         first_page = node.scanbitplusassetutxos(asset_id, 1)
         assert_hex_hash(first_page["reconciliation_hash"])
         assert_hex_hash(first_page["scan_summary_hash"])
-        assert_equal(first_page["scan_summary"]["summary_version"], 1)
         assert_equal(first_page["complete"], False)
         assert_equal(first_page["scan_summary"]["complete"], False)
         assert_equal(first_page["scan_summary"]["has_next_cursor"], True)
         assert_equal(first_page["matches"], 1)
         assert "next_cursor" in first_page
-        assert_equal(first_page["next_cursor"]["cursor_version"], 1)
         assert_equal(first_page["next_cursor"]["asset_id"], asset_id)
         assert_equal(first_page["next_cursor"]["filters_hash"], first_page["scan_summary"]["filters_hash"])
         second_page = node.scanbitplusassetutxos(asset_id, 1, {}, first_page["next_cursor"])
         assert_hex_hash(second_page["reconciliation_hash"])
         assert_hex_hash(second_page["scan_summary_hash"])
-        assert_equal(second_page["scan_summary"]["summary_version"], 1)
         assert_equal(second_page["cursor"], first_page["next_cursor"])
         assert_equal(second_page["scan_summary"]["cursor_applied"], True)
         assert_equal(second_page["scan_summary"]["cursor"], second_page["cursor"])
@@ -710,8 +709,8 @@ class BitplusContractsRPCTest(BitplusTestFramework):
         stale_cursor["height"] += 1
         assert_raises_rpc_error(-8, "cursor does not match the active chain tip", node.scanbitplusassetutxos, asset_id, 1, {}, stale_cursor)
         bad_cursor = dict(first_page["next_cursor"])
-        bad_cursor["cursor_version"] = 2
-        assert_raises_rpc_error(-8, "cursor_version must be 1", node.scanbitplusassetutxos, asset_id, 1, {}, bad_cursor)
+        bad_cursor["unexpected"] = 2
+        assert_raises_rpc_error(-8, "unknown cursor field: unexpected", node.scanbitplusassetutxos, asset_id, 1, {}, bad_cursor)
         mismatched_cursor = dict(first_page["next_cursor"])
         mismatched_cursor["asset_id"] = HASH_D
         assert_raises_rpc_error(-8, "cursor asset_id does not match requested asset_id", node.scanbitplusassetutxos, asset_id, 1, {}, mismatched_cursor)
@@ -719,9 +718,6 @@ class BitplusContractsRPCTest(BitplusTestFramework):
         mismatched_cursor["filters_hash"] = HASH_D
         assert_raises_rpc_error(-8, "cursor filters_hash does not match requested filters", node.scanbitplusassetutxos, asset_id, 1, {}, mismatched_cursor)
         assert_raises_rpc_error(-8, "cursor filters_hash does not match requested filters", node.scanbitplusassetutxos, asset_id, 1, {"type": "transfer"}, first_page["next_cursor"])
-        missing_cursor_field = dict(first_page["next_cursor"])
-        del missing_cursor_field["cursor_version"]
-        assert_raises_rpc_error(-8, "cursor cursor_version is required", node.scanbitplusassetutxos, asset_id, 1, {}, missing_cursor_field)
         bad_cursor = dict(first_page["next_cursor"])
         bad_cursor["unexpected"] = 1
         assert_raises_rpc_error(-8, "unknown cursor field: unexpected", node.scanbitplusassetutxos, asset_id, 1, {}, bad_cursor)
@@ -806,12 +802,12 @@ class BitplusContractsRPCTest(BitplusTestFramework):
 
         stats = node.getbitplusassetstats(asset_id)
         assert_equal(stats["report_type"], "asset_stats")
-        assert_equal(stats["report_version"], 1)
         assert_equal(stats["asset_id"], asset_id)
+        assert_equal(stats["query_backend"], "utxo_scan")
+        assert "index_fallback_reason" not in stats
         assert_hex_hash(stats["reconciliation_hash"])
         assert_hex_hash(stats["reconciliation_summary_hash"])
         assert_equal(stats["reconciliation_summary"]["report_type"], "asset_stats")
-        assert_equal(stats["reconciliation_summary"]["summary_version"], 1)
         assert_equal(stats["reconciliation_summary"]["asset_id"], stats["asset_id"])
         assert_equal(stats["reconciliation_summary"]["filters"], stats["filters"])
         assert_hex_hash(stats["reconciliation_summary"]["filters_hash"])
@@ -822,9 +818,11 @@ class BitplusContractsRPCTest(BitplusTestFramework):
         assert_equal(stats["reconciliation_summary"]["chain_snapshot"], stats["chain_snapshot"])
         assert_hex_hash(stats["reconciliation_summary"]["chain_snapshot_hash"])
         assert_equal(stats["reconciliation_summary"]["reconciliation_hash"], stats["reconciliation_hash"])
+        assert "index_fallback_reason" not in stats["reconciliation_summary"]
+        assert "query_backend" not in stats["reconciliation_summary"]
+        assert "searched_txouts" not in stats["reconciliation_summary"]
         assert_greater_than(stats["searched_txouts"], 0)
         assert_greater_than(stats["utxo_count"], 0)
-        assert_equal(stats["reconciliation_summary"]["searched_txouts"], stats["searched_txouts"])
         assert_equal(stats["reconciliation_summary"]["utxo_count"], stats["utxo_count"])
         assert_greater_than(stats["min_confirmations_observed"], 0)
         assert_greater_than(stats["max_confirmations_observed"], 0)
@@ -910,12 +908,12 @@ class BitplusContractsRPCTest(BitplusTestFramework):
 
         member_stats = node.getbitplusmemberassetstats(HASH_C)
         assert_equal(member_stats["report_type"], "member_asset_stats")
-        assert_equal(member_stats["report_version"], 1)
         assert_equal(member_stats["member_hash"], HASH_C)
+        assert_equal(member_stats["query_backend"], "utxo_scan")
+        assert "index_fallback_reason" not in member_stats
         assert_hex_hash(member_stats["reconciliation_hash"])
         assert_hex_hash(member_stats["reconciliation_summary_hash"])
         assert_equal(member_stats["reconciliation_summary"]["report_type"], "member_asset_stats")
-        assert_equal(member_stats["reconciliation_summary"]["summary_version"], 1)
         assert_equal(member_stats["reconciliation_summary"]["member_hash"], member_stats["member_hash"])
         assert_equal(member_stats["reconciliation_summary"]["filters"], member_stats["filters"])
         assert_hex_hash(member_stats["reconciliation_summary"]["filters_hash"])
@@ -926,10 +924,12 @@ class BitplusContractsRPCTest(BitplusTestFramework):
         assert_equal(member_stats["reconciliation_summary"]["chain_snapshot"], member_stats["chain_snapshot"])
         assert_hex_hash(member_stats["reconciliation_summary"]["chain_snapshot_hash"])
         assert_equal(member_stats["reconciliation_summary"]["reconciliation_hash"], member_stats["reconciliation_hash"])
+        assert "index_fallback_reason" not in member_stats["reconciliation_summary"]
+        assert "query_backend" not in member_stats["reconciliation_summary"]
+        assert "searched_txouts" not in member_stats["reconciliation_summary"]
         assert_greater_than(member_stats["searched_txouts"], 0)
         assert_greater_than(member_stats["asset_count"], 0)
         assert_greater_than(member_stats["utxo_count"], 0)
-        assert_equal(member_stats["reconciliation_summary"]["searched_txouts"], member_stats["searched_txouts"])
         assert_equal(member_stats["reconciliation_summary"]["asset_count"], member_stats["asset_count"])
         assert_equal(member_stats["reconciliation_summary"]["utxo_count"], member_stats["utxo_count"])
         assert_greater_than(member_stats["min_confirmations_observed"], 0)
@@ -1076,6 +1076,7 @@ class BitplusContractsRPCTest(BitplusTestFramework):
 
         self.log.info("Test contract leaf construction RPCs")
         assert_contract_leaf(node.createbitpluscovleaf(OUTPUT_SCRIPT, "1.00000000", 0))
+        assert_contract_leaf(node.createbitpluscovleaf(OUTPUT_SCRIPT, "0.00000000", 0))
 
         vault = node.createbitplusvault(AUTH_SCRIPT, OUTPUT_SCRIPT, "1.00000000", 0, 144, OUTPUT_SCRIPT, "1.00000000", 0)
         assert_contract_leaf(vault["recovery_leaf"])
@@ -1110,11 +1111,15 @@ class BitplusContractsRPCTest(BitplusTestFramework):
         assert_raises_rpc_error(-8, "members must not be empty", node.createbitplusassetwhitelistroot, [])
         assert_raises_rpc_error(-8, "proof_index out of range", node.createbitplusassetwhitelistroot, [HASH_A], 1)
         assert_raises_rpc_error(-8, "asset-metadata-null", node.createbitplusassetid, NULL_HASH, HASH_D, 0)
+        assert_raises_rpc_error(-8, "txid must not be null", node.createbitplusassetid, metadata["commitment_hash"], NULL_HASH, 0)
         assert_raises_rpc_error(-8, "asset-metadata-issuer-null", node.createbitplusassetmetadata, NULL_HASH, HASH_B, whitelist["commitment_hash"])
         assert_raises_rpc_error(-8, "asset-whitelist-members-null", node.createbitplusassetwhitelist, HASH_A, HASH_B, NULL_HASH)
+        assert_raises_rpc_error(-8, "txid must not be null", node.createbitplusassetissuance, NULL_HASH, 0, 500, HASH_A, HASH_B, HASH_A, HASH_B, root["members_root"], HASH_E)
         assert_raises_rpc_error(-8, "asset-whitelist-members-null", node.createbitplusassetissuance, HASH_D, 0, 500, HASH_A, HASH_B, HASH_A, HASH_B, NULL_HASH, HASH_E)
         assert_raises_rpc_error(-8, "asset-id-null", node.createbitplusasset, "transfer", NULL_HASH, 100, metadata["commitment_hash"], HASH_E)
         assert_raises_rpc_error(-8, "asset-whitelist-proof-root-mismatch", node.createbitplusassettransfer, asset_id, 100, metadata["commitment_hash"], HASH_C, 0, 2, root["merkle_path"], HASH_A)
+        assert_raises_rpc_error(-8, "merkle_path too deep", node.createbitplusassetwhitelistproof, 0, HASH_C, 0, [HASH_A] * 33)
+        assert_raises_rpc_error(-8, "merkle_path sibling must not be null", node.createbitplusassetwhitelistproof, 0, HASH_C, 0, [NULL_HASH])
         assert_raises_rpc_error(-8, "asset-whitelist-proof-root-mismatch", node.createbitplusdvp, AUTH_SCRIPT, asset_id, 100, metadata["commitment_hash"], HASH_C, 0, 2, root["merkle_path"], HASH_A, OUTPUT_SCRIPT, "1.00000000", 1)
         assert_raises_rpc_error(-8, "second-asset-whitelist-proof-root-mismatch", node.createbitpluspvp, AUTH_SCRIPT, asset_id, 100, metadata["commitment_hash"], HASH_C, 0, 2, root["merkle_path"], root["members_root"], asset_id, 50, metadata["commitment_hash"], HASH_C, 1, 2, root["merkle_path"], HASH_A)
         assert_raises_rpc_error(-8, "asset-id-null", node.createbitplusassetburn, NULL_HASH, 25, metadata["commitment_hash"], HASH_C)
@@ -1123,7 +1128,7 @@ class BitplusContractsRPCTest(BitplusTestFramework):
         assert_raises_rpc_error(-8, "asset-id-null", node.createbitplusdvpleaf, AUTH_SCRIPT, NULL_HASH, 100, metadata["commitment_hash"], HASH_E, 0, OUTPUT_SCRIPT, "1.00000000", 1)
         assert_raises_rpc_error(-8, "authorization_script must be hexadecimal string", node.createbitplusvaultrecoveryleaf, "", OUTPUT_SCRIPT, "1.00000000", 0)
         assert_raises_rpc_error(-8, "asset-locking-script-unspendable", node.createbitplusdvpleaf, AUTH_SCRIPT, asset_id, 100, metadata["commitment_hash"], HASH_E, 0, OUTPUT_SCRIPT, "1.00000000", 1, "6a")
-        assert_raises_rpc_error(-8, "amount must be greater than zero", node.createbitpluscovleaf, OUTPUT_SCRIPT, "0.00000000", 0)
+        assert_raises_rpc_error(-3, "Amount out of range", node.createbitpluscovleaf, OUTPUT_SCRIPT, "-0.00000001", 0)
         assert_raises_rpc_error(-8, "output_index out of range", node.createbitpluscovleaf, OUTPUT_SCRIPT, "1.00000000", -1)
         assert_raises_rpc_error(-8, "outputs must not be empty", node.createbitplusscripttransaction, [{"txid": HASH_D, "vout": 0}], [])
         assert_raises_rpc_error(-8, "outputs must not be empty", node.createbitpluspsbt, [{"txid": HASH_D, "vout": 0}], [])
@@ -1164,6 +1169,7 @@ class BitplusContractsRPCTest(BitplusTestFramework):
         assert_raises_rpc_error(-8, "input_index out of range", node.analyzebitplustransaction, analysis_tx, [{"input_index": 1, "scriptPubKey": transfer["transfer"]["scriptPubKey"], "amount": "0.00000000"}])
         assert_raises_rpc_error(-8, "duplicate input_index", node.analyzebitplustransaction, analysis_tx, [{"input_index": 0, "scriptPubKey": transfer["transfer"]["scriptPubKey"], "amount": "0.00000000"}, {"input_index": 0, "scriptPubKey": transfer["transfer"]["scriptPubKey"], "amount": "0.00000000"}])
         assert_raises_rpc_error(-8, "relative_delay must be non-negative", node.createbitplusvaultdelayedleaf, AUTH_SCRIPT, -1, OUTPUT_SCRIPT, "1.00000000", 0)
+        assert_raises_rpc_error(-8, "relative_delay out of range", node.createbitplusvaultdelayedleaf, AUTH_SCRIPT, 4294967296, OUTPUT_SCRIPT, "1.00000000", 0)
         assert_raises_rpc_error(-8, "secret_hash must not be null", node.createbitplushtlcclaimleaf, AUTH_SCRIPT, NULL_HASH, OUTPUT_SCRIPT, "1.00000000", 0)
         assert_raises_rpc_error(-8, "absolute_expiry must be non-negative", node.createbitplushtlcrefundleaf, AUTH_SCRIPT, -1, OUTPUT_SCRIPT, "1.00000000", 0)
         assert_raises_rpc_error(-8, "relative_delay must be non-negative", node.createbitplusvault, AUTH_SCRIPT, OUTPUT_SCRIPT, "1.00000000", 0, -1, OUTPUT_SCRIPT, "1.00000000", 0)

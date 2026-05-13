@@ -7,12 +7,17 @@
 
 import os
 
-from test_framework.test_framework import BitplusTestFramework
+from test_framework.test_framework import BitplusTestFramework, SkipTest
 
 
 def rename_and_link(*, from_name, to_name):
     os.rename(from_name, to_name)
-    os.symlink(to_name, from_name)
+    try:
+        os.symlink(to_name, from_name)
+    except OSError as e:
+        if getattr(e, "winerror", None) == 1314:
+            raise SkipTest("symlink privilege is not available")
+        raise
     assert os.path.islink(from_name) and os.path.isdir(from_name)
 
 

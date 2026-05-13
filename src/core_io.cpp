@@ -355,7 +355,6 @@ UniValue BitplusAssetToUniv(const bitplus::assets::AssetCommitment& commitment)
 {
     UniValue asset{UniValue::VOBJ};
     asset.pushKV("format", "BTPASSET");
-    asset.pushKV("version", static_cast<int>(bitplus::assets::ASSET_COMMITMENT_VERSION));
     asset.pushKV("type", BitplusAssetTypeToString(commitment.type));
     asset.pushKV("asset_id", commitment.asset_id.ToString());
     asset.pushKV("amount", UniValue{UniValue::VNUM, strprintf("%llu", static_cast<unsigned long long>(commitment.amount))});
@@ -369,7 +368,6 @@ UniValue BitplusMetadataToUniv(const bitplus::assets::AssetMetadataCommitment& c
 {
     UniValue metadata{UniValue::VOBJ};
     metadata.pushKV("format", "BTPMETA");
-    metadata.pushKV("version", static_cast<int>(bitplus::assets::ASSET_METADATA_VERSION));
     metadata.pushKV("issuer_id", commitment.issuer_id.ToString());
     metadata.pushKV("document_hash", commitment.document_hash.ToString());
     metadata.pushKV("rules_hash", commitment.rules_hash.ToString());
@@ -381,7 +379,6 @@ UniValue BitplusWhitelistToUniv(const bitplus::assets::AssetWhitelistCommitment&
 {
     UniValue whitelist{UniValue::VOBJ};
     whitelist.pushKV("format", "BTPWLST");
-    whitelist.pushKV("version", static_cast<int>(bitplus::assets::ASSET_WHITELIST_VERSION));
     whitelist.pushKV("list_id", commitment.list_id.ToString());
     whitelist.pushKV("admin_key_hash", commitment.admin_key_hash.ToString());
     whitelist.pushKV("members_root", commitment.members_root.ToString());
@@ -394,7 +391,6 @@ UniValue BitplusWhitelistProofToUniv(const bitplus::assets::AssetWhitelistProofC
 {
     UniValue proof{UniValue::VOBJ};
     proof.pushKV("format", "BTPWPROOF");
-    proof.pushKV("version", static_cast<int>(bitplus::assets::ASSET_WHITELIST_PROOF_VERSION));
     proof.pushKV("asset_output_index", static_cast<int64_t>(commitment.asset_output_index));
     proof.pushKV("member_hash", commitment.member_hash.ToString());
     proof.pushKV("proof_index", static_cast<int64_t>(commitment.proof_index));

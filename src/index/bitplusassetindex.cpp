@@ -227,16 +227,17 @@ bool BitplusAssetIndex::ForEachAssetUtxo(
     AssetIdKey key;
     for (it->Seek(std::pair{DB_ASSET_BY_ASSET, asset_id}); it->Valid() && it->GetKey(key) && key.asset_id == asset_id; it->Next()) {
         ++searched;
+        BitplusAssetIndexEntry entry;
+        if (!m_db->Read(AssetOutpointKey{key.outpoint}, entry)) {
+            LogError("Bitplus asset index missing outpoint entry for %s:%u", key.outpoint.hash.GetHex(), key.outpoint.n);
+            return false;
+        }
+
         if (!cursor_found) {
             cursor_found = key.outpoint == *after;
             continue;
         }
 
-        BitplusAssetIndexEntry entry;
-        if (!m_db->Read(AssetOutpointKey{key.outpoint}, entry)) {
-            LogError("Bitplus asset index missing outpoint entry for %s:%u", key.outpoint.hash.GetHex(), key.outpoint.n);
-            continue;
-        }
         if (!callback(key.outpoint, entry)) return true;
     }
     return true;
@@ -256,7 +257,7 @@ bool BitplusAssetIndex::ForEachMemberUtxo(
         BitplusAssetIndexEntry entry;
         if (!m_db->Read(AssetOutpointKey{key.outpoint}, entry)) {
             LogError("Bitplus asset index missing outpoint entry for %s:%u", key.outpoint.hash.GetHex(), key.outpoint.n);
-            continue;
+            return false;
         }
         if (!callback(key.outpoint, entry)) return true;
     }

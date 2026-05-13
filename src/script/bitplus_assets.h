@@ -10,6 +10,7 @@
 #include <script/script.h>
 #include <uint256.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -19,10 +20,7 @@ class CCoinsViewCache;
 
 namespace bitplus::assets {
 
-static constexpr uint8_t ASSET_COMMITMENT_VERSION{1};
-static constexpr uint8_t ASSET_METADATA_VERSION{1};
-static constexpr uint8_t ASSET_WHITELIST_VERSION{1};
-static constexpr uint8_t ASSET_WHITELIST_PROOF_VERSION{1};
+inline constexpr size_t MAX_WHITELIST_PROOF_DEPTH{32};
 
 enum class AssetCommitmentType : uint8_t {
     ISSUANCE = 1,

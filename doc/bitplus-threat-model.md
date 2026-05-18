@@ -1,6 +1,6 @@
 # Bitplus Threat Model
 
-Bitplus targets fixed institutional settlement primitives on a Bitcoin-style UTXO
+Bitplus targets fixed institutional settlement primitives on a Bitplus UTXO
 chain. It does not add EVM-style arbitrary execution.
 
 ## Assets Protected

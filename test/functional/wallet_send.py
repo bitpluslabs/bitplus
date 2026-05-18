@@ -35,7 +35,7 @@ class WalletSendTest(BitplusTestFramework):
             ["-walletrbf=1", "-datacarriersize=16"],
             ["-walletrbf=1", "-datacarriersize=16"]
         ]
-        getcontext().prec = 8 # Satoshi precision for Decimal
+        getcontext().prec = 8 # Base-unit precision for Decimal
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()

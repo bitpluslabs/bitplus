@@ -5,7 +5,7 @@ coverage for external reviewers.
 
 | Primitive | Implementation Surface | Current Coverage |
 | --- | --- | --- |
-| Multisig / threshold custody | Bitcoin Script/Tapscript, PSBT workflows | Existing Bitcoin script coverage; Bitplus PSBT analysis/readiness tests |
+| Multisig / threshold custody | Bitplus Script/Tapscript, PSBT workflows | Existing script coverage; Bitplus PSBT analysis/readiness tests |
 | Timelocks | CLTV/CSV in fixed templates | `feature_bitplus_covenants.py`, contract leaf construction tests |
 | HTLCs | `BuildHtlcClaimLeaf`, `BuildHtlcRefundLeaf`, RPC helpers | Wrong preimage, valid claim, premature refund, valid refund |
 | Covenants | `OP_CHECKOUTPUTVERIFY` under deployment flag | Active/inactive deployment, wrong amount/index, exact spend |

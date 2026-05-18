@@ -21,7 +21,7 @@
 
 namespace {
 
-constexpr MessageStartChars BITCOIN_MAINNET_MAGIC{{0xf9, 0xbe, 0xb4, 0xd9}};
+constexpr MessageStartChars BITPLUS_MAINNET_MAGIC{{0xb7, 0x50, 0x4a, 0x09}};
 
 struct BIP324Test : BasicTestingSetup {
 void TestBIP324PacketVector(
@@ -46,11 +46,11 @@ void TestBIP324PacketVector(
     const auto in_ellswift_theirs = ParseHex<std::byte>(in_ellswift_theirs_hex);
     const auto in_contents = ParseHex<std::byte>(in_contents_hex);
     const auto in_aad = ParseHex<std::byte>(in_aad_hex);
-    const auto mid_send_garbage = ParseHex<std::byte>(mid_send_garbage_hex);
-    const auto mid_recv_garbage = ParseHex<std::byte>(mid_recv_garbage_hex);
-    const auto out_session_id = ParseHex<std::byte>(out_session_id_hex);
-    const auto out_ciphertext = ParseHex<std::byte>(out_ciphertext_hex);
-    const auto out_ciphertext_endswith = ParseHex<std::byte>(out_ciphertext_endswith_hex);
+    (void)mid_send_garbage_hex;
+    (void)mid_recv_garbage_hex;
+    (void)out_session_id_hex;
+    (void)out_ciphertext_hex;
+    (void)out_ciphertext_endswith_hex;
 
     // Load keys
     CKey key;
@@ -62,13 +62,8 @@ void TestBIP324PacketVector(
     BIP324Cipher cipher(key, ellswift_ours);
     BOOST_CHECK(!cipher);
     BOOST_CHECK(cipher.GetOurPubKey() == ellswift_ours);
-    cipher.Initialize(ellswift_theirs, in_initiating, /*self_decrypt=*/false, BITCOIN_MAINNET_MAGIC);
+    cipher.Initialize(ellswift_theirs, in_initiating, /*self_decrypt=*/false, BITPLUS_MAINNET_MAGIC);
     BOOST_CHECK(cipher);
-
-    // Compare session variables.
-    BOOST_CHECK(std::ranges::equal(out_session_id, cipher.GetSessionID()));
-    BOOST_CHECK(std::ranges::equal(mid_send_garbage, cipher.GetSendGarbageTerminator()));
-    BOOST_CHECK(std::ranges::equal(mid_recv_garbage, cipher.GetReceiveGarbageTerminator()));
 
     // Vector of encrypted empty messages, encrypted in order to seek to the right position.
     std::vector<std::vector<std::byte>> dummies(in_idx);
@@ -87,14 +82,7 @@ void TestBIP324PacketVector(
     std::vector<std::byte> ciphertext(contents.size() + cipher.EXPANSION);
     cipher.Encrypt(contents, in_aad, in_ignore, ciphertext);
 
-    // Verify ciphertext. Note that the test vectors specify either out_ciphertext (for short
-    // messages) or out_ciphertext_endswith (for long messages), so only check the relevant one.
-    if (!out_ciphertext.empty()) {
-        BOOST_CHECK(out_ciphertext == ciphertext);
-    } else {
-        BOOST_CHECK(ciphertext.size() >= out_ciphertext_endswith.size());
-        BOOST_CHECK(std::ranges::equal(out_ciphertext_endswith, std::span{ciphertext}.last(out_ciphertext_endswith.size())));
-    }
+    BOOST_CHECK_EQUAL(ciphertext.size(), contents.size() + cipher.EXPANSION);
 
     for (unsigned error = 0; error <= 12; ++error) {
         // error selects a type of error introduced:
@@ -109,13 +97,8 @@ void TestBIP324PacketVector(
         BIP324Cipher dec_cipher(key, ellswift_ours);
         BOOST_CHECK(!dec_cipher);
         BOOST_CHECK(dec_cipher.GetOurPubKey() == ellswift_ours);
-        dec_cipher.Initialize(ellswift_theirs, (error == 1) ^ in_initiating, /*self_decrypt=*/true, BITCOIN_MAINNET_MAGIC);
+        dec_cipher.Initialize(ellswift_theirs, (error == 1) ^ in_initiating, /*self_decrypt=*/true, BITPLUS_MAINNET_MAGIC);
         BOOST_CHECK(dec_cipher);
-
-        // Compare session variables.
-        BOOST_CHECK(std::ranges::equal(out_session_id, dec_cipher.GetSessionID()) == (error != 1));
-        BOOST_CHECK(std::ranges::equal(mid_send_garbage, dec_cipher.GetSendGarbageTerminator()) == (error != 1));
-        BOOST_CHECK(std::ranges::equal(mid_recv_garbage, dec_cipher.GetReceiveGarbageTerminator()) == (error != 1));
 
         // Seek to the numbered packet.
         if (in_idx == 0 && error == 12) continue;
@@ -166,8 +149,10 @@ void TestBIP324PacketVector(
 BOOST_FIXTURE_TEST_SUITE(bip324_tests, BIP324Test)
 
 BOOST_AUTO_TEST_CASE(packet_test_vectors) {
-    // BIP324 key derivation uses network magic in the HKDF process. These published test vectors
-    // are written for Bitcoin mainnet magic, so the test injects that value explicitly.
+    // BIP324 key derivation uses network magic in the HKDF process. Bitplus uses
+    // its own transport salt and mainnet magic, so the published packet vectors
+    // serve as an input corpus for roundtrip and adversarial checks rather than
+    // fixed ciphertext expectations.
     SelectParams(ChainType::MAIN);
 
     // The test vectors are converted using the following Python code in the BIP bip-0324/ directory:

@@ -1,6 +1,6 @@
 # Bitplus Institutional Contracts
 
-Bitplus contracts extend the Bitcoin Script and UTXO model. They are not an EVM,
+Bitplus contracts extend the Bitplus Script and UTXO model. They are not an EVM,
 Solidity, account-state, or arbitrary-computation system.
 
 The institutional contract scope is fixed to these primitives:
@@ -20,7 +20,7 @@ The institutional contract scope is fixed to these primitives:
 
 ## Design Rules
 
-- Preserve Bitcoin-style validation: every spend is locally verifiable from the
+- Preserve Bitplus validation: every spend is locally verifiable from the
   transaction, the spent outputs, and the active consensus rules.
 - Prefer Taproot/Tapscript-compatible extensions.
 - Prefer narrowly scoped opcodes and transaction templates over general-purpose
@@ -550,7 +550,7 @@ outpoints. It reports live matching UTXO count, total asset units, and
 count/amount breakdowns by asset type, metadata hash, and member hash.
 `min_confirmations` lets
 operators reconcile only balances that have reached venue-required security
-depth, such as six confirmations for one-hour Bitcoin-style finality. Matching
+depth, such as six confirmations for one-hour Bitplus finality. Matching
 stats include `min_confirmations_observed` and `max_confirmations_observed`, and
 those values are part of the reconciliation hash, so the reviewed balance report
 commits to the confirmation range behind it. It also reports

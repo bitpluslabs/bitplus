@@ -19,7 +19,7 @@ using util::Join;
  * for both bitplusd and bitplus-qt, to make it harder for attackers to
  * target servers or GUI users specifically.
  */
-const std::string UA_NAME("Satoshi");
+const std::string UA_NAME("Bitplus");
 
 
 #include <bitplus-build-info.h>

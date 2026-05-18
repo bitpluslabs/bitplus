@@ -687,29 +687,29 @@ BOOST_AUTO_TEST_CASE(btpk_block_header_tests)
     BOOST_CHECK_THROW(BlockHeader{hex_string_to_byte_vec("00")}, std::runtime_error);
     BOOST_CHECK_THROW(BlockHeader{hex_string_to_byte_vec("")}, std::runtime_error);
 
-    // Test all header field accessors using mainnet block 1
-    auto mainnet_block_1_header = hex_string_to_byte_vec("010000006fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000982051fd1e4ba744bbbe680e1fee14677ba1a3c3540bf7b1cdb606e857233e0e61bc6649ffff001d01e36299");
-    BlockHeader header{mainnet_block_1_header};
+    // Test all header field accessors using the Bitplus main chain genesis header.
+    auto mainnet_genesis_header = hex_string_to_byte_vec("01000000000000000000000000000000000000000000000000000000000000000000000077d5676b1b4ea2453f17e1dd2355d9e8b2156aea24c81ed367b0d30348ace3800a05096affff001d37b5b905");
+    BlockHeader header{mainnet_genesis_header};
     BOOST_CHECK_EQUAL(header.Version(), 1);
-    BOOST_CHECK_EQUAL(header.Timestamp(), 1231469665);
+    BOOST_CHECK_EQUAL(header.Timestamp(), 1778976010);
     BOOST_CHECK_EQUAL(header.Bits(), 0x1d00ffff);
-    BOOST_CHECK_EQUAL(header.Nonce(), 2573394689);
-    BOOST_CHECK_EQUAL(byte_span_to_hex_string_reversed(header.Hash().ToBytes()), "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048");
+    BOOST_CHECK_EQUAL(header.Nonce(), 96056631);
+    BOOST_CHECK_EQUAL(byte_span_to_hex_string_reversed(header.Hash().ToBytes()), "00000000b0e14d742a71f293b7ad9a3123f0104e43b185bbff604e5064be070c");
     auto prev_hash = header.PrevHash();
-    BOOST_CHECK_EQUAL(byte_span_to_hex_string_reversed(prev_hash.ToBytes()), "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f");
+    BOOST_CHECK_EQUAL(byte_span_to_hex_string_reversed(prev_hash.ToBytes()), "0000000000000000000000000000000000000000000000000000000000000000");
 
     // Test round-trip serialization of block header
     auto header_roundtrip{BlockHeader{header.ToBytes()}};
-    check_equal(header_roundtrip.ToBytes(), mainnet_block_1_header);
+    check_equal(header_roundtrip.ToBytes(), mainnet_genesis_header);
 
-    auto raw_block = hex_string_to_byte_vec("010000006fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000982051fd1e4ba744bbbe680e1fee14677ba1a3c3540bf7b1cdb606e857233e0e61bc6649ffff001d01e362990101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d0104ffffffff0100f2052a0100000043410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac00000000");
+    auto raw_block = hex_string_to_byte_vec("01000000000000000000000000000000000000000000000000000000000000000000000077d5676b1b4ea2453f17e1dd2355d9e8b2156aea24c81ed367b0d30348ace3800a05096affff001d37b5b9050101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff3a04ffff001d010432426974706c75732031372f4d61792f3230323620496e737469747574696f6e616c20736574746c656d656e7420636861696effffffff0100f2052a01000000226a203117be12925363d401b75f2c025d9c6d0eb47b7b8050c0483040a164a7ab220900000000");
     Block block{raw_block};
     BlockHeader block_header{block.GetHeader()};
     BOOST_CHECK_EQUAL(block_header.Version(), 1);
-    BOOST_CHECK_EQUAL(block_header.Timestamp(), 1231469665);
+    BOOST_CHECK_EQUAL(block_header.Timestamp(), 1778976010);
     BOOST_CHECK_EQUAL(block_header.Bits(), 0x1d00ffff);
-    BOOST_CHECK_EQUAL(block_header.Nonce(), 2573394689);
-    BOOST_CHECK_EQUAL(byte_span_to_hex_string_reversed(block_header.Hash().ToBytes()), "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048");
+    BOOST_CHECK_EQUAL(block_header.Nonce(), 96056631);
+    BOOST_CHECK_EQUAL(byte_span_to_hex_string_reversed(block_header.Hash().ToBytes()), "00000000b0e14d742a71f293b7ad9a3123f0104e43b185bbff604e5064be070c");
 
     // Verify header from block serializes to first 80 bytes of raw block
     auto block_header_bytes = block_header.ToBytes();
@@ -880,16 +880,15 @@ void chainman_mainnet_validation_test(TestDirectory& test_directory)
         test_directory, /*reindex=*/false, /*wipe_chainstate=*/false,
         /*block_tree_db_in_memory=*/false, /*chainstate_db_in_memory=*/false, context)};
 
-    // mainnet block 1
-    auto raw_block = hex_string_to_byte_vec("010000006fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000982051fd1e4ba744bbbe680e1fee14677ba1a3c3540bf7b1cdb606e857233e0e61bc6649ffff001d01e362990101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d0104ffffffff0100f2052a0100000043410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac00000000");
+    auto raw_block = hex_string_to_byte_vec("01000000000000000000000000000000000000000000000000000000000000000000000077d5676b1b4ea2453f17e1dd2355d9e8b2156aea24c81ed367b0d30348ace3800a05096affff001d37b5b9050101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff3a04ffff001d010432426974706c75732031372f4d61792f3230323620496e737469747574696f6e616c20736574746c656d656e7420636861696effffffff0100f2052a01000000226a203117be12925363d401b75f2c025d9c6d0eb47b7b8050c0483040a164a7ab220900000000");
     Block block{raw_block};
     BlockHeader header{block.GetHeader()};
     TransactionView tx{block.GetTransaction(block.CountTransactions() - 1)};
-    BOOST_CHECK_EQUAL(byte_span_to_hex_string_reversed(tx.Txid().ToBytes()), "0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098");
+    BOOST_CHECK_EQUAL(byte_span_to_hex_string_reversed(tx.Txid().ToBytes()), "80e3ac4803d3b067d31ec824ea6a15b2e8d95523dde1173f45a24e1b6b67d577");
     BOOST_CHECK_EQUAL(header.Version(), 1);
-    BOOST_CHECK_EQUAL(header.Timestamp(), 1231469665);
+    BOOST_CHECK_EQUAL(header.Timestamp(), 1778976010);
     BOOST_CHECK_EQUAL(header.Bits(), 0x1d00ffff);
-    BOOST_CHECK_EQUAL(header.Nonce(), 2573394689);
+    BOOST_CHECK_EQUAL(header.Nonce(), 96056631);
     BOOST_CHECK_EQUAL(tx.CountInputs(), 1);
     Transaction tx2 = tx;
     BOOST_CHECK_EQUAL(tx2.CountInputs(), 1);

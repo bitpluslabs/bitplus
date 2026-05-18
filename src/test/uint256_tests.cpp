@@ -331,8 +331,8 @@ BOOST_AUTO_TEST_CASE( check_ONE )
 
 BOOST_AUTO_TEST_CASE(FromHex_vs_uint256)
 {
-    auto runtime_uint{uint256::FromHex("4A5E1E4BAAB89F3A32518A88C31BC87F618f76673e2cc77ab2127b7afdeda33b")};
-    constexpr uint256 consteval_uint{  "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"};
+    auto runtime_uint{uint256::FromHex("80E3AC4803D3B067D31EC824EA6A15B2E8D95523DDE1173F45A24E1B6B67D577")};
+    constexpr uint256 consteval_uint{  "80e3ac4803d3b067d31ec824ea6a15b2e8d95523dde1173f45a24e1b6b67d577"};
     BOOST_CHECK_EQUAL(consteval_uint, runtime_uint);
 }
 

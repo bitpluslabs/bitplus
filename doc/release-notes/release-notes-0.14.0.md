@@ -149,7 +149,7 @@ Some examples:
 
     src/bitplus-cli -named help command="help"
     src/bitplus-cli -named getblockhash height=0
-    src/bitplus-cli -named getblock blockhash=000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f
+    src/bitplus-cli -named getblock blockhash=00000000b0e14d742a71f293b7ad9a3123f0104e43b185bbff604e5064be070c
     src/bitplus-cli -named sendtoaddress address="(snip)" amount="1.0" subtractfeefromamount=true
 
 The order of arguments doesn't matter in this case. Named arguments are also

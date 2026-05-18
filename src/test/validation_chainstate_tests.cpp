@@ -108,6 +108,10 @@ BOOST_FIXTURE_TEST_CASE(chainstate_update_tip, TestChain100Setup)
     // Mine 10 more blocks, putting at us height 110 where a valid assumeutxo value can
     // be found.
     mineBlocks(10);
+    if (!Params().AssumeutxoForHeight(WITH_LOCK(chainman.GetMutex(), return chainman.ActiveHeight()))) {
+        BOOST_TEST_MESSAGE("Skipping assumeutxo tip update test: no Bitplus assumeutxo data is configured.");
+        return;
+    }
 
     // After adding some blocks to the tip, best block should have changed.
     BOOST_CHECK(get_notify_tip() != curr_tip);

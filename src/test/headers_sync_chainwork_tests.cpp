@@ -50,6 +50,7 @@ constexpr arith_uint256 CHAIN_WORK{TARGET_BLOCKS * 2};
 // required to reach the CHAIN_WORK threshold, to behave similarly to mainnet.
 constexpr size_t REDOWNLOAD_BUFFER_SIZE{TARGET_BLOCKS - (MAX_HEADERS_RESULTS + 123)};
 constexpr size_t COMMITMENT_PERIOD{600}; // Somewhat close to mainnet.
+constexpr uint32_t MAX_TEST_POW_TRIES{1'000'000};
 
 struct HeadersGeneratorSetup : public RegTestingSetup {
     const CBlock& genesis{Params().GenesisBlock()};
@@ -106,9 +107,10 @@ private:
 
 void HeadersGeneratorSetup::FindProofOfWork(CBlockHeader& starting_header)
 {
-    while (!CheckProofOfWork(starting_header.GetHash(), starting_header.nBits, Params().GetConsensus())) {
+    for (uint32_t tries{0}; tries < MAX_TEST_POW_TRIES && !CheckProofOfWork(starting_header.GetHash(), starting_header.nBits, Params().GetConsensus()); ++tries) {
         ++starting_header.nNonce;
     }
+    BOOST_REQUIRE(CheckProofOfWork(starting_header.GetHash(), starting_header.nBits, Params().GetConsensus()));
 }
 
 std::vector<CBlockHeader> HeadersGeneratorSetup::GenerateHeaders(

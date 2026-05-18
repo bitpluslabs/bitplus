@@ -510,7 +510,7 @@ static void run_sha256_multi_block_compression_tests(void) {
     }
 
     {   /* 2) Writing one 80-byte block vs two 40-byte blocks */
-        const unsigned char data[80] = "Genesis: The Times 03/Jan/2009 Chancellor on brink of second bailout for banks ";
+        const unsigned char data[80] = "Genesis: Bitplus 17/May/2026 Institutional settlement chain proof seed!!!!!!!!!!";
         unsigned char data40[40];
 
         secp256k1_sha256_initialize(&sha256_one);

@@ -15,6 +15,7 @@ BOOST_FIXTURE_TEST_SUITE(peerman_tests, RegTestingSetup)
 
 /** Window, in blocks, for connecting to NODE_NETWORK_LIMITED peers */
 static constexpr int64_t NODE_NETWORK_LIMITED_ALLOW_CONN_BLOCKS = 144;
+static constexpr uint32_t MAX_TEST_POW_TRIES{1'000'000};
 
 static void mineBlock(const node::NodeContext& node, std::chrono::seconds block_time)
 {
@@ -23,7 +24,10 @@ static void mineBlock(const node::NodeContext& node, std::chrono::seconds block_
     options.include_dummy_extranonce = true;
     SetMockTime(block_time); // update time so the block is created with it
     CBlock block = node::BlockAssembler{node.chainman->ActiveChainstate(), nullptr, options}.CreateNewBlock()->block;
-    while (!CheckProofOfWork(block.GetHash(), block.nBits, node.chainman->GetConsensus())) ++block.nNonce;
+    for (uint32_t tries{0}; tries < MAX_TEST_POW_TRIES && !CheckProofOfWork(block.GetHash(), block.nBits, node.chainman->GetConsensus()); ++tries) {
+        ++block.nNonce;
+    }
+    BOOST_REQUIRE(CheckProofOfWork(block.GetHash(), block.nBits, node.chainman->GetConsensus()));
     block.fChecked = true; // little speedup
     SetMockTime(curr_time); // process block at current time
     Assert(node.chainman->ProcessNewBlock(std::make_shared<const CBlock>(block), /*force_processing=*/true, /*min_pow_checked=*/true, nullptr));

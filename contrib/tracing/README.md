@@ -353,7 +353,7 @@ Logging opened, closed, misbehaving, and evicted P2P connections
 OUTBOUND conn to 127.0.0.1:15287: id=0, type=block-relay-only, network=0, total_out=1
 INBOUND conn from 127.0.0.1:45324: id=1, type=inbound, network=0, total_in=1
 MISBEHAVING conn id=1, score_before=0, score_increase=20, message='getdata message size = 50001', threshold_exceeded=false
-CLOSED conn to 127.0.0.1:15287: id=0, type=block-relay-only, network=0, established=1231006505
+CLOSED conn to 127.0.0.1:15287: id=0, type=block-relay-only, network=0, established=1778976010
 EVICTED conn to 127.0.0.1:45324: id=1, type=inbound, network=0, established=1612312312
 ...
 ```

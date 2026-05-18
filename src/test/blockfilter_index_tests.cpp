@@ -26,6 +26,8 @@ using node::CBlockTemplate;
 
 BOOST_AUTO_TEST_SUITE(blockfilter_index_tests)
 
+static constexpr uint32_t MAX_TEST_POW_TRIES{1'000'000};
+
 struct BuildChainTestingSetup : public TestChain100Setup {
     CBlock CreateBlock(const CBlockIndex* prev, const std::vector<CMutableTransaction>& txns, const CScript& scriptPubKey);
     bool BuildChain(const CBlockIndex* pindex, const CScript& coinbase_script_pub_key, size_t length, std::vector<std::shared_ptr<CBlock>>& chain);
@@ -90,7 +92,10 @@ CBlock BuildChainTestingSetup::CreateBlock(const CBlockIndex* prev,
         block.hashMerkleRoot = BlockMerkleRoot(block);
     }
 
-    while (!CheckProofOfWork(block.GetHash(), block.nBits, m_node.chainman->GetConsensus())) ++block.nNonce;
+    for (uint32_t tries{0}; tries < MAX_TEST_POW_TRIES && !CheckProofOfWork(block.GetHash(), block.nBits, m_node.chainman->GetConsensus()); ++tries) {
+        ++block.nNonce;
+    }
+    BOOST_REQUIRE(CheckProofOfWork(block.GetHash(), block.nBits, m_node.chainman->GetConsensus()));
 
     return block;
 }

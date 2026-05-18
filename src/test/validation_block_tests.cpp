@@ -24,6 +24,8 @@ using kernel::ChainstateRole;
 using node::BlockAssembler;
 
 namespace validation_block_tests {
+static constexpr uint32_t MAX_TEST_POW_TRIES{1'000'000};
+
 struct MinerTestingSetup : public RegTestingSetup {
     std::shared_ptr<CBlock> Block(const uint256& prev_hash);
     std::shared_ptr<const CBlock> GoodBlock(const uint256& prev_hash);
@@ -100,9 +102,10 @@ std::shared_ptr<CBlock> MinerTestingSetup::FinalizeBlock(std::shared_ptr<CBlock>
 
     pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);
 
-    while (!CheckProofOfWork(pblock->GetHash(), pblock->nBits, Params().GetConsensus())) {
+    for (uint32_t tries{0}; tries < MAX_TEST_POW_TRIES && !CheckProofOfWork(pblock->GetHash(), pblock->nBits, Params().GetConsensus()); ++tries) {
         ++(pblock->nNonce);
     }
+    BOOST_REQUIRE(CheckProofOfWork(pblock->GetHash(), pblock->nBits, Params().GetConsensus()));
 
     // submit block header, so that miner can get the block height from the
     // global state and the node has the topology of the chain

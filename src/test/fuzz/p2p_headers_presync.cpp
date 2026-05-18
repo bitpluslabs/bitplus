@@ -21,6 +21,7 @@
 
 namespace {
 constexpr uint32_t FUZZ_MAX_HEADERS_RESULTS{16};
+constexpr uint32_t FUZZ_MAX_POW_TRIES{10'000};
 
 class HeadersSyncSetup : public TestingSetup
 {
@@ -105,14 +106,13 @@ CBlockHeader ConsumeHeader(FuzzedDataProvider& fuzzed_data_provider, const uint2
     CBlockHeader header;
     header.nNonce = 0;
     // Either use the previous difficulty or let the fuzzer choose. The upper target in the
-    // range comes from the bits value of the genesis block, which is 0x1d00ffff. The lower
-    // target comes from the bits value of mainnet block 840000, which is 0x17034219.
+    // range comes from the Bitplus main chain genesis bits value, which is 0x1d00ffff. The lower
+    // target is a high-work sample compact target, 0x17034219.
     // Calling lower_target.SetCompact(0x17034219) and upper_target.SetCompact(0x1d00ffff)
     // should return the values below.
     //
     // RPC commands to verify:
-    // getblockheader 000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f
-    // getblockheader 0000000000000000000320283a032748cef8227873ff4872689bf23f1cda83a5
+    // getblockheader 00000000b0e14d742a71f293b7ad9a3123f0104e43b185bbff604e5064be070c
     if (fuzzed_data_provider.ConsumeBool()) {
         header.nBits = prev_nbits;
     } else {
@@ -143,11 +143,12 @@ CBlock ConsumeBlock(FuzzedDataProvider& fuzzed_data_provider, const uint256& pre
     return block;
 }
 
-void FinalizeHeader(CBlockHeader& header, const ChainstateManager& chainman)
+bool FinalizeHeader(CBlockHeader& header, const ChainstateManager& chainman)
 {
-    while (!CheckProofOfWork(header.GetHash(), header.nBits, chainman.GetParams().GetConsensus())) {
+    for (uint32_t tries{0}; tries < FUZZ_MAX_POW_TRIES && !CheckProofOfWork(header.GetHash(), header.nBits, chainman.GetParams().GetConsensus()); ++tries) {
         ++(header.nNonce);
     }
+    return CheckProofOfWork(header.GetHash(), header.nBits, chainman.GetParams().GetConsensus());
 }
 
 // Global setup works for this test as state modification (specifically in the
@@ -192,7 +193,7 @@ FUZZ_TARGET(p2p_headers_presync, .init = initialize)
     {
         auto finalized_block = [&]() {
             CBlock block = ConsumeBlock(fuzzed_data_provider, base.GetHash(), base.nBits);
-            FinalizeHeader(block, chainman);
+            (void)FinalizeHeader(block, chainman);
             return block;
         };
 
@@ -205,7 +206,7 @@ FUZZ_TARGET(p2p_headers_presync, .init = initialize)
                 headers.resize(FUZZ_MAX_HEADERS_RESULTS);
                 for (CBlock& header : headers) {
                     header = ConsumeHeader(fuzzed_data_provider, base.GetHash(), base.nBits);
-                    FinalizeHeader(header, chainman);
+                    (void)FinalizeHeader(header, chainman);
                     base = header;
                 }
 

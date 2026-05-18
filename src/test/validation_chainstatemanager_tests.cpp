@@ -184,7 +184,11 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_ibd_exit_after_loading_blocks, ChainTe
         chainman.m_cached_is_ibd.store(cached_is_ibd, std::memory_order_relaxed);
         chainman.m_blockman.m_importing = loading_blocks;
         if (tip_exists) {
-            tip.nChainWork = chainman.MinimumChainWork() - (enough_work ? 0 : 1);
+            const auto minimum_chain_work{chainman.MinimumChainWork()};
+            tip.nChainWork = minimum_chain_work;
+            if (!enough_work && minimum_chain_work != 0) {
+                tip.nChainWork -= 1;
+            }
             tip.nTime = (recent_time - (tip_recent ? 0h : 100h)).time_since_epoch().count();
             chainman.ActiveChain().SetTip(tip);
         } else {
@@ -199,7 +203,8 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_ibd_exit_after_loading_blocks, ChainTe
                 for (const bool enough_work : {false, true}) {
                     for (const bool tip_recent : {false, true}) {
                         apply(cached_is_ibd, loading_blocks, tip_exists, enough_work, tip_recent);
-                        const bool expected_ibd = cached_is_ibd && (loading_blocks || !tip_exists || !enough_work || !tip_recent);
+                        const bool has_enough_work{enough_work || chainman.MinimumChainWork() == 0};
+                        const bool expected_ibd = cached_is_ibd && (loading_blocks || !tip_exists || !has_enough_work || !tip_recent);
                         BOOST_CHECK_EQUAL(chainman.IsInitialBlockDownload(), expected_ibd);
                     }
                 }
@@ -267,6 +272,10 @@ struct SnapshotTestSetup : TestChain100Setup {
         mineBlocks(10);
         initial_size += 10;
         initial_total_coins += 10;
+        if (!::Params().AssumeutxoForHeight(snapshot_height)) {
+            BOOST_TEST_MESSAGE("Skipping assumeutxo snapshot setup: no Bitplus assumeutxo data is configured.");
+            return {nullptr, nullptr};
+        }
 
         // Should not load malleated snapshots
         BOOST_REQUIRE(!CreateAndActivateUTXOSnapshot(
@@ -454,7 +463,8 @@ struct SnapshotTestSetup : TestChain100Setup {
 //! Test basic snapshot activation.
 BOOST_FIXTURE_TEST_CASE(chainstatemanager_activate_snapshot, SnapshotTestSetup)
 {
-    this->SetupSnapshot();
+    auto chainstates = this->SetupSnapshot();
+    if (!std::get<0>(chainstates)) return;
 }
 
 //! Test LoadBlockIndex behavior when multiple chainstates are in use.
@@ -714,7 +724,8 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_snapshot_init, SnapshotTestSetup)
     ChainstateManager& chainman = *Assert(m_node.chainman);
     Chainstate& bg_chainstate = chainman.ActiveChainstate();
 
-    this->SetupSnapshot();
+    auto chainstates = this->SetupSnapshot();
+    if (!std::get<0>(chainstates)) return;
 
     fs::path snapshot_chainstate_dir = *node::FindAssumeutxoChainstateDir(chainman.m_options.datadir);
     BOOST_CHECK(fs::exists(snapshot_chainstate_dir));
@@ -785,7 +796,8 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_snapshot_init, SnapshotTestSetup)
 
 BOOST_FIXTURE_TEST_CASE(chainstatemanager_snapshot_completion, SnapshotTestSetup)
 {
-    this->SetupSnapshot();
+    auto chainstates = this->SetupSnapshot();
+    if (!std::get<0>(chainstates)) return;
 
     ChainstateManager& chainman = *Assert(m_node.chainman);
     Chainstate& active_cs = chainman.ActiveChainstate();
@@ -866,6 +878,7 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_snapshot_completion, SnapshotTestSetup
 BOOST_FIXTURE_TEST_CASE(chainstatemanager_snapshot_completion_hash_mismatch, SnapshotTestSetup)
 {
     auto chainstates = this->SetupSnapshot();
+    if (!std::get<0>(chainstates)) return;
     Chainstate& validation_chainstate = *std::get<0>(chainstates);
     Chainstate& unvalidated_cs = *std::get<1>(chainstates);
     ChainstateManager& chainman = *Assert(m_node.chainman);

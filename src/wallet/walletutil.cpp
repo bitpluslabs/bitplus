@@ -10,6 +10,9 @@
 #include <logging.h>
 
 namespace wallet {
+
+static constexpr int64_t BITPLUS_COIN_TYPE = 7777;
+
 fs::path GetWalletDir()
 {
     fs::path path;
@@ -67,11 +70,10 @@ WalletDescriptor GenerateWalletDescriptor(const CExtPubKey& master_key, const Ou
     } // no default case, so the compiler can warn about missing cases
     assert(!desc_prefix.empty());
 
-    // Mainnet derives at 0', testnet and regtest derive at 1'
     if (Params().IsTestChain()) {
         desc_prefix += "/1h";
     } else {
-        desc_prefix += "/0h";
+        desc_prefix += "/" + std::to_string(BITPLUS_COIN_TYPE) + "h";
     }
 
     std::string internal_path = internal ? "/1" : "/0";

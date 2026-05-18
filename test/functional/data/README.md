@@ -2,8 +2,13 @@
 
 ## mainnet_alt.json
 
-For easier testing the difficulty is maximally increased in the first (and only)
-retarget period, by producing blocks approximately 2 minutes apart.
+This fixture is intentionally absent. The inherited Bitcoin fixture was removed
+after Bitplus received its own genesis block.
+
+To restore the `mining_mainnet.py` coverage, regenerate this file on the
+Bitplus main chain. For easier testing the difficulty is maximally increased in
+the first (and only) retarget period, by producing blocks approximately 2
+minutes apart.
 
 The alternate mainnet chain was generated as follows:
 - use faketime to set node clock to 2 minutes after genesis block
@@ -22,15 +27,15 @@ done
 The CPU miner is kept running as follows:
 
 ```sh
-./minerd -u ... -p ... -o http://127.0.0.1:8332 --no-stratum \
-        --coinbase-addr 1NQpH6Nf8QtR2HphLRcvuVqfhXBXsiWn8r \
+./minerd -u ... -p ... -o http://127.0.0.1:9456 --no-stratum \
+        --coinbase-addr <bitplus-mainnet-address> \
         --algo sha256d --no-longpoll --scantime 3 --retry-pause 1
 ```
 
-The payout address is derived from first BIP32 test vector master key:
+The payout address should be derived from the first BIP32 test vector master key:
 
 ```
-pkh(xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi/44h/0h/0h/<0;1>/*)#fkjtr0yn
+pkh(<bitplus-mainnet-xprv>/44h/7777h/0h/<0;1>/*)
 ```
 
 It uses `pkh()` because `tr()` outputs at low heights are not spendable (`unexpected-witness`).

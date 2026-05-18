@@ -180,15 +180,15 @@ You can also manually configure your node to be reachable from the Tor network.
 Add these lines to your `/etc/tor/torrc` (or equivalent config file):
 
     HiddenServiceDir /var/lib/tor/bitplus-service/
-    HiddenServicePort 8333 127.0.0.1:8334
+    HiddenServicePort 9457 127.0.0.1:9458
     # If `tor --list-modules` shows "pow: yes", then enable PoW protection.
     # It is available in tor-0.4.8.1-alpha and newer when configured with
     # `./configure --enable-gpl`.
     HiddenServicePoWDefensesEnabled 1
 
 The directory can be different of course, but virtual port numbers should be equal to
-your bitplusd's P2P listen port (8333 by default), and target addresses and ports
-should be equal to binding address and port for inbound Tor connections (127.0.0.1:8334 by default).
+your bitplusd's P2P listen port (9457 by default), and target addresses and ports
+should be equal to binding address and port for inbound Tor connections (127.0.0.1:9458 by default).
 
     -externalip=X   You can tell bitplus about its publicly reachable addresses using
                     this option, and this can be an onion address. Given the above
@@ -221,14 +221,14 @@ In a typical situation, where you're only reachable via Tor, this should suffice
 listen on all devices and another node could establish a clearnet connection, when knowing
 your address. To mitigate this, additionally bind the address of your Tor proxy:
 
-    bitplusd ... -bind=127.0.0.1:8334=onion
+    bitplusd ... -bind=127.0.0.1:9458=onion
 
 If you don't care too much about hiding your node, and want to be reachable on IPv4
 as well, use `discover` instead:
 
     bitplusd ... -discover
 
-and open port 8333 on your firewall (or use port mapping, i.e., `-natpmp`).
+and open port 9457 on your firewall (or use port mapping, i.e., `-natpmp`).
 
 If you only want to use Tor to reach .onion addresses, but not use it as a proxy
 for normal IPv4/IPv6 communication, use:

@@ -19,6 +19,17 @@ const std::vector<std::pair<Wtxid, CTransactionRef>> empty_extra_txn;
 
 BOOST_FIXTURE_TEST_SUITE(blockencodings_tests, RegTestingSetup)
 
+static constexpr uint32_t MAX_TEST_POW_TRIES{1'000'000};
+
+static bool GrindBlock(CBlock& block)
+{
+    for (uint32_t tries{0}; tries < MAX_TEST_POW_TRIES; ++tries) {
+        if (CheckProofOfWork(block.GetHash(), block.nBits, Params().GetConsensus())) return true;
+        ++block.nNonce;
+    }
+    return false;
+}
+
 static CMutableTransaction BuildTransactionTestCase() {
     CMutableTransaction tx;
     tx.vin.resize(1);
@@ -52,7 +63,7 @@ static CBlock BuildBlockTestCase(FastRandomContext& ctx) {
     bool mutated;
     block.hashMerkleRoot = BlockMerkleRoot(block, &mutated);
     assert(!mutated);
-    while (!CheckProofOfWork(block.GetHash(), block.nBits, Params().GetConsensus())) ++block.nNonce;
+    BOOST_REQUIRE(GrindBlock(block));
     return block;
 }
 
@@ -283,7 +294,7 @@ BOOST_AUTO_TEST_CASE(EmptyBlockRoundTripTest)
     bool mutated;
     block.hashMerkleRoot = BlockMerkleRoot(block, &mutated);
     assert(!mutated);
-    while (!CheckProofOfWork(block.GetHash(), block.nBits, Params().GetConsensus())) ++block.nNonce;
+    BOOST_REQUIRE(GrindBlock(block));
 
     // Test simple header round-trip with only coinbase
     {

@@ -34,6 +34,7 @@ static void SetupBitplusUtilArgs(ArgsManager &argsman)
     SetupHelpOptions(argsman);
 
     argsman.AddArg("-version", "Print version and exit", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-threads=<n>", "Set the number of worker threads for proof-of-work grinding. Defaults to hardware concurrency.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
 
     argsman.AddCommand("grind", "Perform proof of work on hex header string");
 
@@ -129,7 +130,11 @@ static int Grind(const std::vector<std::string>& args, std::string& strPrint)
     uint32_t proposed_nonce{};
 
     std::vector<std::thread> threads;
-    int n_tasks = std::max(1u, std::thread::hardware_concurrency());
+    int n_tasks = gArgs.GetIntArg("-threads", std::max(1u, std::thread::hardware_concurrency()));
+    if (n_tasks < 1) {
+        strPrint = "Thread count must be at least 1";
+        return EXIT_FAILURE;
+    }
     threads.reserve(n_tasks);
     for (int i = 0; i < n_tasks; ++i) {
         threads.emplace_back(grind_task, nBits, header, i, n_tasks, std::ref(found), std::ref(proposed_nonce));

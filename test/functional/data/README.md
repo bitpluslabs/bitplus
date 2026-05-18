@@ -13,7 +13,7 @@ The alternate mainnet chain was generated as follows:
 ```sh
 for i in {1..2016}
 do
- t=$(( 1231006505 + $i * 120 ))
+ t=$(( 1778976010 + $i * 120 ))
  faketime "`date -d @$t  +'%Y-%m-%d %H:%M:%S'`" \
  bitplusd -connect=0 -nocheckpoints -stopatheight=$i
 done

@@ -14,7 +14,7 @@ order to maximally raise the difficulty. Verify this using the getmininginfo RPC
 
 """
 
-from test_framework.test_framework import BitplusTestFramework
+from test_framework.test_framework import BitplusTestFramework, SkipTest
 from test_framework.util import (
     assert_equal,
 )
@@ -52,6 +52,9 @@ class MiningMainnetTest(BitplusTestFramework):
             default='data/mainnet_alt.json',
             help='Block data file (default: %(default)s)',
         )
+
+    def skip_test_if_missing_module(self):
+        raise SkipTest("mainnet_alt.json was generated for the inherited Bitcoin genesis; regenerate it for the Bitplus genesis before enabling this test")
 
     def mine(self, height, prev_hash, blocks, node):
         self.log.debug(f"height={height}")
